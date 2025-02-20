@@ -64,7 +64,11 @@ auto loadCSV(const std::filesystem::path &path)
 				val = val.replace(val.find(','), 1, ".");
 			}
 
-			values[col_name].data.push_back(std::stod(val));
+			try {
+				values[col_name].data.push_back(std::stod(val));
+			} catch (const std::exception& /*e*/) {
+				values[col_name].data.push_back(std::numeric_limits<double>::quiet_NaN());
+			}
 		}
 	}
 
