@@ -74,6 +74,9 @@
 		"xutility": "cpp",
 		"ranges": "cpp",
 		"span": "cpp",
-		"execution": "cpp"
+		"execution": "cpp",
+		"deque": "cpp",
+		"queue": "cpp",
+		"numeric": "cpp"
 	}
 }

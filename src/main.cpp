@@ -35,6 +35,22 @@ namespace {
 		return std::mktime(&t);
 	}
 
+	auto stripUnit(std::string_view header) -> std::pair<std::string, std::string> {
+		const auto pos = header.find_last_of('(');
+		if (pos == std::string::npos) {
+			return {std::string(header), ""};
+		}
+
+		const auto name = header.substr(0, pos);
+		const auto unit = header.substr(pos + 1, header.find_last_of(')') - pos - 1);
+
+		if (unit.size() > 5){
+			return {std::string(header), ""};
+		}
+
+		return {std::string(name), std::string(unit)};
+	}
+
 	auto loadCSV(const std::filesystem::path &path)
 		-> std::pair<std::vector<double>, std::unordered_map<std::string, data_dict>> {
 		using namespace csv;
@@ -45,13 +61,16 @@ namespace {
 
 		CSVReader reader(path.string());
 
-		for (const auto &name : reader.get_col_names() | std::ranges::views::drop(1)) {
-			if (name.empty()) {
+		for (const auto &header_string : reader.get_col_names() | std::ranges::views::drop(1)) {
+			if (header_string.empty()) {
 				continue;
 			}
 
-			values[name].name = name;
-			col_names.push_back(name);
+			const auto [name, unit] = stripUnit(header_string);
+
+			values[header_string].name = name;
+			values[header_string].unit = unit;
+			col_names.push_back(header_string);
 		}
 
 		for (auto &row : reader) {
@@ -134,8 +153,21 @@ namespace {
 	
 		if (ImPlot::BeginPlot(y.name.c_str(), ImVec2(v_max.x - v_min.x, (v_max.y - v_min.y) * 0.95),
 							  ImPlotFlags_NoLegend | ImPlotFlags_NoTitle)) {
+			const auto fmt = [&y]() -> std::string {
+				if (y.unit.empty()) {
+					return "%g";
+				}
+				
+				if (y.unit == "%") {
+					return "%g%%";
+				}
+
+				return "%g " + y.unit;
+			}();
+
 			ImPlot::SetupAxes("date", y.name.c_str());
 			ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Time);
+			ImPlot::SetupAxisFormat(ImAxis_Y1, fmt.c_str());
 			ImPlot::PlotLine(y.name.c_str(), timestamp.data(), y.data.data(), timestamp.size());
 			ImPlot::EndPlot();
 		}
