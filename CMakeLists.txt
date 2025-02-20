@@ -30,6 +30,7 @@ include(spdlog)
 include(implot)
 include(csv-parser)
 include(add_cxxopts)
+include(nativefiledialog-extended)
 
-target_link_libraries(spreadsheet_analyzer PRIVATE imgui implot SDL3::SDL3 Threads::Threads ${OPENGL_LIBRARIES} fmt spdlog csv cxxopts)
+target_link_libraries(spreadsheet_analyzer PRIVATE imgui implot SDL3::SDL3 Threads::Threads ${OPENGL_LIBRARIES} fmt spdlog csv cxxopts nfd)
 target_include_directories(spreadsheet_analyzer PRIVATE ${OPENGL_INCLUDE_DIR})

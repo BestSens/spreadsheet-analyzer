@@ -1,10 +1,12 @@
 #include <chrono>
 #include <ctime>
+#include <execution>
 #include <filesystem>
 #include <ranges>
-#include <string_view>
-#include <vector>
 #include <sstream>
+#include <string_view>
+#include <unordered_map>
+#include <vector>
 
 #include "SDL3/SDL_main.h"
 #include "SDL3/SDL_opengl.h"
@@ -14,8 +16,8 @@
 #include "cxxopts.hpp"
 #include "imgui.h"
 #include "implot.h"
+#include "nfd.hpp"
 #include "spdlog/spdlog.h"
-
 
 struct data_dict {
 	std::string name;
@@ -32,19 +34,23 @@ auto parseDate(const std::string& str) -> time_t {
 	return std::mktime(&t);
 }
 
-auto loadCSV(std::filesystem::path path) -> std::pair<std::vector<double>, std::vector<data_dict>> {
+auto loadCSV(const std::filesystem::path &path)
+	-> std::pair<std::vector<double>, std::unordered_map<std::string, data_dict>> {
 	using namespace csv;
+
+	std::vector<std::string> col_names{};
+	std::vector<double> timestamp{};
+	std::unordered_map<std::string, data_dict> values{};
+
 	CSVReader reader(path.string());
 
-	std::vector<double> timestamp{};
-	std::vector<data_dict> values{};
-
-	for (const auto& name : reader.get_col_names() | std::ranges::views::drop(1)) {
+	for (const auto &name : reader.get_col_names() | std::ranges::views::drop(1)) {
 		if (name.empty()) {
 			continue;
 		}
 
-		values.push_back({name, ""});
+		values[name].name = name;
+		col_names.push_back(name);
 	}
 
 	for (auto &row : reader) {
@@ -52,13 +58,60 @@ auto loadCSV(std::filesystem::path path) -> std::pair<std::vector<double>, std::
 		const auto date = parseDate(date_str);
 		timestamp.push_back(static_cast<double>(date));
 
-		for (auto& dct : values) {
-			auto val = row[dct.name].get<std::string>();
+		for (const auto &col_name : col_names) {
+			auto val = row[col_name].get<std::string>();
 			if (val.find(',') != std::string::npos) {
 				val = val.replace(val.find(','), 1, ".");
 			}
 
-			dct.data.push_back(std::stof(val));
+			values[col_name].data.push_back(std::stod(val));
+		}
+	}
+
+	return {timestamp, values};
+}
+
+auto loadCSVs(const std::vector<std::filesystem::path> &paths)
+	-> std::pair<std::vector<double>, std::unordered_map<std::string, data_dict>> {
+	if (paths.empty()) {
+		return {{}, {}};
+	}
+
+	std::vector<double> timestamp{};
+	std::unordered_map<std::string, data_dict> values{};
+
+	struct context {
+		size_t index;
+		std::filesystem::path path;
+		std::vector<double> timestamp{};
+		std::unordered_map<std::string, data_dict> values{};
+	};
+
+	std::vector<context> contexts{};
+	contexts.reserve(paths.size());
+
+	for (size_t i = 0; const auto& path : paths) {
+		contexts.push_back({.index = ++i, .path = path});
+	}
+
+	std::for_each(std::execution::par_unseq, contexts.begin(), contexts.end(), [&contexts](auto &ctx) {
+		spdlog::info("Loading file: {} ({}/{})...", ctx.path.filename().string(), ctx.index, contexts.size());
+		const auto [ts, val] = loadCSV(ctx.path);
+		ctx.timestamp = ts;
+		ctx.values = val;
+	});
+
+	spdlog::info("Merging data...");
+
+	for (const auto &ctx : contexts) {
+		timestamp.insert(timestamp.end(), ctx.timestamp.begin(), ctx.timestamp.end());
+
+		for (const auto &[key, value] : ctx.values) {
+			if (values.find(key) == values.end()) {
+				values[key] = value;
+			} else {
+				values[key].data.insert(values[key].data.end(), value.data.begin(), value.data.end());
+			}
 		}
 	}
 
@@ -82,14 +135,48 @@ void Demo_LinePlots(const std::vector<double> &timestamp, const data_dict &y) {
 	}
 }
 
+auto selectFilesFromDialog() -> std::vector<std::filesystem::path> {
+	NFD::Guard nfdGuard;
+	NFD::UniquePathSet outPaths;
+
+	const auto filters = std::array<nfdfilteritem_t, 1>{
+		nfdfilteritem_t{"CSV", "csv"}
+	};
+
+	const auto result = NFD::OpenDialogMultiple(outPaths, filters.data(), filters.size());
+
+	if (result == NFD_OKAY) {
+		nfdpathsetsize_t numPaths;
+		NFD::PathSet::Count(outPaths, numPaths);
+		std::vector<std::filesystem::path> paths{};
+		paths.reserve(numPaths);
+
+		for (nfdpathsetsize_t i = 0; i < numPaths; ++i) {
+			NFD::UniquePathSetPath path;
+			NFD::PathSet::GetPath(outPaths, i, path);
+			paths.push_back(std::filesystem::path(path.get()));
+		}
+
+		return paths;
+	} else if (result == NFD_CANCEL) {
+		spdlog::info("User pressed cancel.");
+	} else {
+		spdlog::error("Error: {}", NFD::GetError());
+	}
+
+	return {};
+}
+
+// #pragma comment(linker, "/SUBSYSTEM:windows /ENTRY:mainCRTStartup")
 auto main(int argc, char ** argv) -> int {
-	std::filesystem::path path{};
+	std::vector<std::filesystem::path> paths{};
+	
 	{
 		cxxopts::Options options(argv[0], "ImPlot Demo using ImGui and SDL2");
 
 		options.add_options()
 			("h,help", "Print usage")
-			("filename", "CSV file to load", cxxopts::value<std::string>(), "FILE")
+			("filename", "CSV file to load", cxxopts::value<std::vector<std::string>>(), "FILE")
 			;
 
 		try {
@@ -101,11 +188,10 @@ auto main(int argc, char ** argv) -> int {
 				return EXIT_SUCCESS;
 			}
 
-			if (result.count("filename") == 0u) {
-				spdlog::error("Filename is required");
-				return EXIT_FAILURE;
-			}else {
-				path = result["filename"].as<std::string>();
+			if (result.count("filename") > 0u) {
+				for (const auto& file : result["filename"].as<std::vector<std::string>>()) {
+					paths.push_back(std::filesystem::path(file));
+				}
 			}
 		} catch (const std::exception& e) {
 			spdlog::critical(e.what());
@@ -114,7 +200,20 @@ auto main(int argc, char ** argv) -> int {
 
 	}
 
-	const auto [x, y] = loadCSV(path);
+	if (paths.empty()) {
+		paths = selectFilesFromDialog();
+	}
+
+	if (paths.empty()) {
+		spdlog::error("No files selected.");
+		return EXIT_FAILURE;
+	}
+
+	std::sort(paths.begin(), paths.end(), [](const auto& a, const auto& b) {
+		return a.filename() < b.filename();
+	});
+
+	const auto [x, y] = loadCSVs(paths);
 
 	if (!SDL_Init(SDL_INIT_VIDEO)) {
 		spdlog::error("Error: {}", SDL_GetError());
@@ -122,7 +221,6 @@ auto main(int argc, char ** argv) -> int {
 	}
 
 	spdlog::info("SDL Initialized");
-	const auto filename = path.filename().string();
 
 	const char *glsl_version = "#version 130";
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
@@ -136,7 +234,7 @@ auto main(int argc, char ** argv) -> int {
 	SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
 	SDL_WindowFlags window_flags =
 		(SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
-	SDL_Window *window = SDL_CreateWindow(filename.c_str(), 1280, 720, window_flags);
+	SDL_Window *window = SDL_CreateWindow("Spreadsheet Analyzer 2.0", 1280, 720, window_flags);
 	SDL_GLContext gl_context = SDL_GL_CreateContext(window);
 	SDL_GL_MakeCurrent(window, gl_context);
 	SDL_GL_SetSwapInterval(1);	// Enable vsync
@@ -194,12 +292,12 @@ auto main(int argc, char ** argv) -> int {
 
 			ImGui::SetNextWindowPos(ImVec2(0, 0));
 			ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, io.DisplaySize.y));
-			ImGui::Begin("File content", &show_plot_window);
+			ImGui::Begin("File content", &show_plot_window, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
 
 			if (ImGui::BeginTabBar("ImPlotDemoTabs")) {
 				for (const auto &dct : y) {
-					if (ImGui::BeginTabItem(dct.name.c_str())) {
-						Demo_LinePlots(x, dct);
+					if (ImGui::BeginTabItem(dct.first.c_str())) {
+						Demo_LinePlots(x, dct.second);
 						ImGui::EndTabItem();
 					}
 				}
