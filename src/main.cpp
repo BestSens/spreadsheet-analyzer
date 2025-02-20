@@ -297,6 +297,7 @@ auto main(int argc, char ** argv) -> int {
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 	ImGuiIO &io = ImGui::GetIO();
+	io.IniFilename = NULL;
 	io.Fonts->AddFontFromFileTTF("FiraCode-Regular.ttf", 15);
 
 	// Setup Dear ImGui style
