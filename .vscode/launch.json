@@ -5,11 +5,9 @@
             "name": "clang++ build and debug active file",
             "targetArchitecture": "x86_64",
 
-            //"type": "cppdbg",
             "type": "lldb",
             "request": "launch",
-			
-			"cwd": "${workspaceFolder}",
+
             "program": "${command:cmake.launchTargetPath}",
             
             "args": [],
