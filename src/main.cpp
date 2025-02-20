@@ -19,14 +19,22 @@
 #include "nfd.hpp"
 #include "spdlog/spdlog.h"
 
-struct data_dict {
-	std::string name;
-	std::string unit;
-
-	std::vector<double> data{};
-};
-
 namespace {
+	struct data_dict {
+		std::string name;
+		std::string unit;
+	
+		std::vector<double> timestamp{};
+		std::vector<double> data{};
+	};
+
+	struct immediate_dict {
+		std::string name;
+		std::string unit;
+
+		std::vector<std::pair<time_t, double>> data{};
+	};
+
 	auto parseDate(const std::string &str) -> time_t {
 		std::tm t{};
 		std::istringstream ss(str);
@@ -51,13 +59,11 @@ namespace {
 		return {std::string(name), std::string(unit)};
 	}
 
-	auto loadCSV(const std::filesystem::path &path)
-		-> std::pair<std::vector<double>, std::unordered_map<std::string, data_dict>> {
+	auto loadCSV(const std::filesystem::path &path) -> std::unordered_map<std::string, immediate_dict> {
 		using namespace csv;
 
 		std::vector<std::string> col_names{};
-		std::vector<double> timestamp{};
-		std::unordered_map<std::string, data_dict> values{};
+		std::unordered_map<std::string, immediate_dict> values{};
 
 		CSVReader reader(path.string());
 
@@ -68,47 +74,43 @@ namespace {
 
 			const auto [name, unit] = stripUnit(header_string);
 
-			values[header_string].name = name;
-			values[header_string].unit = unit;
+			values[header_string] = {.name = name, .unit = unit, .data = {}};
 			col_names.push_back(header_string);
 		}
 
 		for (auto &row : reader) {
 			const auto date_str = row[0].get<std::string>();
 			const auto date = parseDate(date_str);
-			timestamp.push_back(static_cast<double>(date));
 
 			for (const auto &col_name : col_names) {
 				auto val = row[col_name].get<std::string>();
-				if (val.find(',') != std::string::npos) {
-					val = val.replace(val.find(','), 1, ".");
+
+				const auto pos = val.find(',');
+				if (pos != std::string::npos) {
+					val = val.replace(pos, 1, ".");
 				}
 
 				try {
-					values[col_name].data.push_back(std::stod(val));
-				} catch (const std::exception & /*e*/) {
-					values[col_name].data.push_back(std::numeric_limits<double>::quiet_NaN());
-				}
+					values[col_name].data.push_back({date, std::stod(val)});
+				} catch (const std::exception & /*e*/) {}
 			}
 		}
 
-		return {timestamp, values};
+		return values;
 	}
 
-	auto loadCSVs(const std::vector<std::filesystem::path> &paths)
-		-> std::pair<std::vector<double>, std::unordered_map<std::string, data_dict>> {
+	auto loadCSVs(const std::vector<std::filesystem::path> &paths) -> std::vector<data_dict> {
 		if (paths.empty()) {
 			return {{}, {}};
 		}
 
-		std::vector<double> timestamp{};
-		std::unordered_map<std::string, data_dict> values{};
+		std::unordered_map<std::string, immediate_dict> values_temp{};
+		std::vector<data_dict> values{};
 
 		struct context {
 			size_t index;
 			std::filesystem::path path;
-			std::vector<double> timestamp{};
-			std::unordered_map<std::string, data_dict> values{};
+			std::unordered_map<std::string, immediate_dict> values{};
 		};
 
 		std::vector<context> contexts{};
@@ -120,29 +122,43 @@ namespace {
 
 		std::for_each(std::execution::par_unseq, contexts.begin(), contexts.end(), [&contexts](auto &ctx) {
 			spdlog::info("Loading file: {} ({}/{})...", ctx.path.filename().string(), ctx.index, contexts.size());
-			const auto [ts, val] = loadCSV(ctx.path);
-			ctx.timestamp = ts;
-			ctx.values = val;
+			ctx.values = loadCSV(ctx.path);
 		});
 
 		spdlog::info("Merging data...");
 
 		for (const auto &ctx : contexts) {
-			timestamp.insert(timestamp.end(), ctx.timestamp.begin(), ctx.timestamp.end());
-
 			for (const auto &[key, value] : ctx.values) {
-				if (values.find(key) == values.end()) {
-					values[key] = value;
+				if (values_temp.find(key) == values_temp.end()) {
+					values_temp[key] = value;
 				} else {
-					values[key].data.insert(values[key].data.end(), value.data.begin(), value.data.end());
+					values_temp[key].data.insert(values_temp[key].data.end(), value.data.begin(), value.data.end());
 				}
 			}
 		}
 
-		return {timestamp, values};
+		values.reserve(values_temp.size());
+
+		for (auto &&[key, value] : values_temp) {
+			std::sort(std::execution::par, value.data.begin(), value.data.end(),
+					  [](const auto &a, const auto &b) { return a.first < b.first; });
+
+			data_dict dd{};
+			dd.name = value.name;
+			dd.unit = value.unit;
+
+			for (const auto &[date, val] : value.data) {
+				dd.timestamp.push_back(static_cast<double>(date));
+				dd.data.push_back(val);
+			}
+
+			values.push_back(dd);
+		}
+
+		return values;
 	}
 
-	auto plotColumn(const std::vector<double> &timestamp, const data_dict &y) -> void {
+	auto plotColumn(const data_dict &col) -> void {
 		ImVec2 v_min = ImGui::GetWindowContentRegionMin();
 		ImVec2 v_max = ImGui::GetWindowContentRegionMax();
 	
@@ -151,24 +167,24 @@ namespace {
 		v_max.x += ImGui::GetWindowPos().x;
 		v_max.y += ImGui::GetWindowPos().y;
 	
-		if (ImPlot::BeginPlot(y.name.c_str(), ImVec2(v_max.x - v_min.x, (v_max.y - v_min.y) * 0.95),
+		if (ImPlot::BeginPlot(col.name.c_str(), ImVec2(v_max.x - v_min.x, (v_max.y - v_min.y) * 0.95f),
 							  ImPlotFlags_NoLegend | ImPlotFlags_NoTitle)) {
-			const auto fmt = [&y]() -> std::string {
-				if (y.unit.empty()) {
+			const auto fmt = [&col]() -> std::string {
+				if (col.unit.empty()) {
 					return "%g";
 				}
 				
-				if (y.unit == "%") {
+				if (col.unit == "%") {
 					return "%g%%";
 				}
 
-				return "%g " + y.unit;
+				return "%g " + col.unit;
 			}();
 
-			ImPlot::SetupAxes("date", y.name.c_str());
+			ImPlot::SetupAxes("date", col.name.c_str());
 			ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Time);
 			ImPlot::SetupAxisFormat(ImAxis_Y1, fmt.c_str());
-			ImPlot::PlotLine(y.name.c_str(), timestamp.data(), y.data.data(), timestamp.size());
+			ImPlot::PlotLine(col.name.c_str(), col.timestamp.data(), col.data.data(), col.timestamp.size());
 			ImPlot::EndPlot();
 		}
 	}
@@ -252,7 +268,7 @@ auto main(int argc, char ** argv) -> int {
 		return a.filename() < b.filename();
 	});
 
-	const auto [x, y] = loadCSVs(paths);
+	const auto data_dict = loadCSVs(paths);
 
 	if (!SDL_Init(SDL_INIT_VIDEO)) {
 		spdlog::error("Error: {}", SDL_GetError());
@@ -335,9 +351,9 @@ auto main(int argc, char ** argv) -> int {
 			ImGui::Begin("File content", &show_plot_window, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
 
 			if (ImGui::BeginTabBar("ImPlotDemoTabs")) {
-				for (const auto &dct : y) {
-					if (ImGui::BeginTabItem(dct.first.c_str())) {
-						plotColumn(x, dct.second);
+				for (const auto &dct : data_dict) {
+					if (ImGui::BeginTabItem(dct.name.c_str())) {
+						plotColumn(dct);
 						ImGui::EndTabItem();
 					}
 				}
