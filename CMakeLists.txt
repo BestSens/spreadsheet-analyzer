@@ -25,9 +25,11 @@ find_package(OpenGL REQUIRED)
 
 include(imgui)
 include(sdl)
-include(glew)
 include(fmt)
 include(spdlog)
+include(implot)
+include(csv-parser)
+include(add_cxxopts)
 
-target_link_libraries(spreadsheet_analyzer PRIVATE imgui SDL3::SDL3 Threads::Threads ${OPENGL_LIBRARIES} fmt spdlog)
+target_link_libraries(spreadsheet_analyzer PRIVATE imgui implot SDL3::SDL3 Threads::Threads ${OPENGL_LIBRARIES} fmt spdlog csv cxxopts)
 target_include_directories(spreadsheet_analyzer PRIVATE ${OPENGL_INCLUDE_DIR})

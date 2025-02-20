@@ -1,20 +1,128 @@
+#include <chrono>
+#include <ctime>
+#include <filesystem>
+#include <ranges>
+#include <string_view>
+#include <vector>
+#include <sstream>
+
 #include "SDL3/SDL_main.h"
+#include "SDL3/SDL_opengl.h"
 #include "backends/imgui_impl_opengl3.h"
 #include "backends/imgui_impl_sdl3.h"
+#include "csv.hpp"
+#include "cxxopts.hpp"
 #include "imgui.h"
+#include "implot.h"
 #include "spdlog/spdlog.h"
 
-#if defined(IMGUI_IMPL_OPENGL_ES2)
-#include "SDL3/SDL_opengles2.h"
-#else
-#include "SDL3/SDL_opengl.h"
-#endif
 
-auto main(int, char **) -> int {
+struct data_dict {
+	std::string name;
+	std::string unit;
+
+	std::vector<double> data{};
+};
+
+auto parseDate(const std::string& str) -> time_t {
+	std::tm t{};
+	std::istringstream ss(str);
+	ss.imbue(std::locale("de_DE.utf-8"));
+	ss >> std::get_time(&t, "%Y/%m/%d %H:%M:%S");
+	return std::mktime(&t);
+}
+
+auto loadCSV(std::filesystem::path path) -> std::pair<std::vector<double>, std::vector<data_dict>> {
+	using namespace csv;
+	CSVReader reader(path.string());
+
+	std::vector<double> timestamp{};
+	std::vector<data_dict> values{};
+
+	for (const auto& name : reader.get_col_names() | std::ranges::views::drop(1)) {
+		if (name.empty()) {
+			continue;
+		}
+
+		values.push_back({name, ""});
+	}
+
+	for (auto &row : reader) {
+		const auto date_str = row[0].get<std::string>();
+		const auto date = parseDate(date_str);
+		timestamp.push_back(static_cast<double>(date));
+
+		for (auto& dct : values) {
+			auto val = row[dct.name].get<std::string>();
+			if (val.find(',') != std::string::npos) {
+				val = val.replace(val.find(','), 1, ".");
+			}
+
+			dct.data.push_back(std::stof(val));
+		}
+	}
+
+	return {timestamp, values};
+}
+
+void Demo_LinePlots(const std::vector<double> &timestamp, const data_dict &y) {
+	ImVec2 vMin = ImGui::GetWindowContentRegionMin();
+	ImVec2 vMax = ImGui::GetWindowContentRegionMax();
+
+	vMin.x += ImGui::GetWindowPos().x;
+	vMin.y += ImGui::GetWindowPos().y;
+	vMax.x += ImGui::GetWindowPos().x;
+	vMax.y += ImGui::GetWindowPos().y;
+
+	if (ImPlot::BeginPlot(y.name.c_str(), ImVec2(vMax.x - vMin.x, (vMax.y - vMin.y) * 0.95), ImPlotFlags_NoLegend | ImPlotFlags_NoTitle)) {
+		ImPlot::SetupAxes("date", y.name.c_str());
+		ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Time);
+		ImPlot::PlotLine(y.name.c_str(), timestamp.data(), y.data.data(), timestamp.size());
+		ImPlot::EndPlot();
+	}
+}
+
+auto main(int argc, char ** argv) -> int {
+	std::filesystem::path path{};
+	{
+		cxxopts::Options options(argv[0], "ImPlot Demo using ImGui and SDL2");
+
+		options.add_options()
+			("h,help", "Print usage")
+			("filename", "CSV file to load", cxxopts::value<std::string>(), "FILE")
+			;
+
+		try {
+			options.parse_positional({"filename"});
+			auto result = options.parse(argc, argv);
+
+			if (result.count("help") != 0u) {
+				spdlog::info(options.help());
+				return EXIT_SUCCESS;
+			}
+
+			if (result.count("filename") == 0u) {
+				spdlog::error("Filename is required");
+				return EXIT_FAILURE;
+			}else {
+				path = result["filename"].as<std::string>();
+			}
+		} catch (const std::exception& e) {
+			spdlog::critical(e.what());
+			return EXIT_FAILURE;
+		}
+
+	}
+
+	const auto [x, y] = loadCSV(path);
+
 	if (!SDL_Init(SDL_INIT_VIDEO)) {
 		spdlog::error("Error: {}", SDL_GetError());
 		return -1;
 	}
+
+	spdlog::info("SDL Initialized");
+	const auto filename = path.filename().string();
 
 	const char *glsl_version = "#version 130";
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
@@ -28,7 +136,7 @@ auto main(int, char **) -> int {
 	SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
 	SDL_WindowFlags window_flags =
 		(SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
-	SDL_Window *window = SDL_CreateWindow("Dear ImGui SDL3+OpenGL3 example", 1280, 720, window_flags);
+	SDL_Window *window = SDL_CreateWindow(filename.c_str(), 1280, 720, window_flags);
 	SDL_GLContext gl_context = SDL_GL_CreateContext(window);
 	SDL_GL_MakeCurrent(window, gl_context);
 	SDL_GL_SetSwapInterval(1);	// Enable vsync
@@ -36,7 +144,6 @@ auto main(int, char **) -> int {
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 	ImGuiIO &io = ImGui::GetIO();
-	(void)io;
 
 	// Setup Dear ImGui style
 	ImGui::StyleColorsDark();
@@ -46,8 +153,7 @@ auto main(int, char **) -> int {
 	ImGui_ImplSDL3_InitForOpenGL(window, gl_context);
 	ImGui_ImplOpenGL3_Init(glsl_version);
 
-	bool show_demo_window = true;
-	bool show_another_window = false;
+	bool show_plot_window = false;
 	ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
 	// Main loop
@@ -78,53 +184,29 @@ auto main(int, char **) -> int {
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplSDL3_NewFrame();
 		ImGui::NewFrame();
+		ImGui::GetStyle().WindowRounding = 0.0f;
 
-		// 1. Show the big demo window (Most of the sample code is in
-		// ImGui::ShowDemoWindow()! You can browse its code to learn more about
-		// Dear ImGui!).
-		if (show_demo_window)
-			ImGui::ShowDemoWindow(&show_demo_window);
-
-		// 2. Show a simple window that we create ourselves. We use a Begin/End
-		// pair to created a named window.
 		{
-			static float f = 0.0f;
-			static int counter = 0;
+			ImPlot::CreateContext();
+			ImPlot::GetStyle().UseLocalTime = true;
+			ImPlot::GetStyle().UseISO8601 = true;
+			ImPlot::GetStyle().Use24HourClock = true;
 
-			ImGui::Begin("Hello, world!");	// Create a window called "Hello,
-											// world!" and append into it.
+			ImGui::SetNextWindowPos(ImVec2(0, 0));
+			ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, io.DisplaySize.y));
+			ImGui::Begin("File content", &show_plot_window);
 
-			ImGui::Text("This is some useful text.");			// Display some text (you can use
-																// a format strings too)
-			ImGui::Checkbox("Demo Window", &show_demo_window);	// Edit bools storing our
-																// window open/close state
-			ImGui::Checkbox("Another Window", &show_another_window);
+			if (ImGui::BeginTabBar("ImPlotDemoTabs")) {
+				for (const auto &dct : y) {
+					if (ImGui::BeginTabItem(dct.name.c_str())) {
+						Demo_LinePlots(x, dct);
+						ImGui::EndTabItem();
+					}
+				}
 
-			ImGui::SliderFloat("float", &f, 0.0f,
-							   1.0f);  // Edit 1 float using a slider from 0.0f to 1.0f
-			ImGui::ColorEdit3("clear color",
-							  (float *)&clear_color);  // Edit 3 floats representing a color
+				ImGui::EndTabBar();
+			}
 
-			if (ImGui::Button("Button"))  // Buttons return true when clicked (most widgets
-										  // return true when edited/activated)
-				counter++;
-			ImGui::SameLine();
-			ImGui::Text("counter = %d", counter);
-
-			ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate,
-						ImGui::GetIO().Framerate);
-			ImGui::End();
-		}
-
-		// 3. Show another simple window.
-		if (show_another_window) {
-			ImGui::Begin("Another Window",
-						 &show_another_window);	 // Pass a pointer to our bool variable
-												 // (the window will have a closing button
-												 // that will clear the bool when clicked)
-			ImGui::Text("Hello from another window!");
-			if (ImGui::Button("Close Me"))
-				show_another_window = false;
 			ImGui::End();
 		}
 
@@ -141,6 +223,7 @@ auto main(int, char **) -> int {
 	// Cleanup
 	ImGui_ImplOpenGL3_Shutdown();
 	ImGui_ImplSDL3_Shutdown();
+	ImPlot::DestroyContext();
 	ImGui::DestroyContext();
 
 	SDL_GL_DestroyContext(gl_context);
