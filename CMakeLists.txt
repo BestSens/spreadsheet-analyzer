@@ -32,5 +32,16 @@ include(csv-parser)
 include(add_cxxopts)
 include(nativefiledialog-extended)
 
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND CMAKE_BUILD_TYPE MATCHES "Debug")
+	target_compile_options(spreadsheet_analyzer PRIVATE
+		-fprofile-instr-generate
+		-fcoverage-mapping
+	)
+	target_link_options(spreadsheet_analyzer PRIVATE
+		-fprofile-instr-generate
+		-fcoverage-mapping
+	)
+endif()
+
 target_link_libraries(spreadsheet_analyzer PRIVATE imgui implot SDL3::SDL3 Threads::Threads ${OPENGL_LIBRARIES} fmt spdlog csv cxxopts nfd)
 target_include_directories(spreadsheet_analyzer PRIVATE ${OPENGL_INCLUDE_DIR})
