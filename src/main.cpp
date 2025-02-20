@@ -26,150 +26,153 @@ struct data_dict {
 	std::vector<double> data{};
 };
 
-auto parseDate(const std::string& str) -> time_t {
-	std::tm t{};
-	std::istringstream ss(str);
-	ss.imbue(std::locale("de_DE.utf-8"));
-	ss >> std::get_time(&t, "%Y/%m/%d %H:%M:%S");
-	return std::mktime(&t);
-}
-
-auto loadCSV(const std::filesystem::path &path)
-	-> std::pair<std::vector<double>, std::unordered_map<std::string, data_dict>> {
-	using namespace csv;
-
-	std::vector<std::string> col_names{};
-	std::vector<double> timestamp{};
-	std::unordered_map<std::string, data_dict> values{};
-
-	CSVReader reader(path.string());
-
-	for (const auto &name : reader.get_col_names() | std::ranges::views::drop(1)) {
-		if (name.empty()) {
-			continue;
-		}
-
-		values[name].name = name;
-		col_names.push_back(name);
+namespace {
+	auto parseDate(const std::string &str) -> time_t {
+		std::tm t{};
+		std::istringstream ss(str);
+		ss.imbue(std::locale("de_DE.utf-8"));
+		ss >> std::get_time(&t, "%Y/%m/%d %H:%M:%S");
+		return std::mktime(&t);
 	}
 
-	for (auto &row : reader) {
-		const auto date_str = row[0].get<std::string>();
-		const auto date = parseDate(date_str);
-		timestamp.push_back(static_cast<double>(date));
+	auto loadCSV(const std::filesystem::path &path)
+		-> std::pair<std::vector<double>, std::unordered_map<std::string, data_dict>> {
+		using namespace csv;
 
-		for (const auto &col_name : col_names) {
-			auto val = row[col_name].get<std::string>();
-			if (val.find(',') != std::string::npos) {
-				val = val.replace(val.find(','), 1, ".");
-			}
-
-			try {
-				values[col_name].data.push_back(std::stod(val));
-			} catch (const std::exception& /*e*/) {
-				values[col_name].data.push_back(std::numeric_limits<double>::quiet_NaN());
-			}
-		}
-	}
-
-	return {timestamp, values};
-}
-
-auto loadCSVs(const std::vector<std::filesystem::path> &paths)
-	-> std::pair<std::vector<double>, std::unordered_map<std::string, data_dict>> {
-	if (paths.empty()) {
-		return {{}, {}};
-	}
-
-	std::vector<double> timestamp{};
-	std::unordered_map<std::string, data_dict> values{};
-
-	struct context {
-		size_t index;
-		std::filesystem::path path;
+		std::vector<std::string> col_names{};
 		std::vector<double> timestamp{};
 		std::unordered_map<std::string, data_dict> values{};
-	};
 
-	std::vector<context> contexts{};
-	contexts.reserve(paths.size());
+		CSVReader reader(path.string());
 
-	for (size_t i = 0; const auto& path : paths) {
-		contexts.push_back({.index = ++i, .path = path});
-	}
+		for (const auto &name : reader.get_col_names() | std::ranges::views::drop(1)) {
+			if (name.empty()) {
+				continue;
+			}
 
-	std::for_each(std::execution::par_unseq, contexts.begin(), contexts.end(), [&contexts](auto &ctx) {
-		spdlog::info("Loading file: {} ({}/{})...", ctx.path.filename().string(), ctx.index, contexts.size());
-		const auto [ts, val] = loadCSV(ctx.path);
-		ctx.timestamp = ts;
-		ctx.values = val;
-	});
+			values[name].name = name;
+			col_names.push_back(name);
+		}
 
-	spdlog::info("Merging data...");
+		for (auto &row : reader) {
+			const auto date_str = row[0].get<std::string>();
+			const auto date = parseDate(date_str);
+			timestamp.push_back(static_cast<double>(date));
 
-	for (const auto &ctx : contexts) {
-		timestamp.insert(timestamp.end(), ctx.timestamp.begin(), ctx.timestamp.end());
+			for (const auto &col_name : col_names) {
+				auto val = row[col_name].get<std::string>();
+				if (val.find(',') != std::string::npos) {
+					val = val.replace(val.find(','), 1, ".");
+				}
 
-		for (const auto &[key, value] : ctx.values) {
-			if (values.find(key) == values.end()) {
-				values[key] = value;
-			} else {
-				values[key].data.insert(values[key].data.end(), value.data.begin(), value.data.end());
+				try {
+					values[col_name].data.push_back(std::stod(val));
+				} catch (const std::exception & /*e*/) {
+					values[col_name].data.push_back(std::numeric_limits<double>::quiet_NaN());
+				}
 			}
 		}
+
+		return {timestamp, values};
 	}
 
-	return {timestamp, values};
-}
-
-void Demo_LinePlots(const std::vector<double> &timestamp, const data_dict &y) {
-	ImVec2 vMin = ImGui::GetWindowContentRegionMin();
-	ImVec2 vMax = ImGui::GetWindowContentRegionMax();
-
-	vMin.x += ImGui::GetWindowPos().x;
-	vMin.y += ImGui::GetWindowPos().y;
-	vMax.x += ImGui::GetWindowPos().x;
-	vMax.y += ImGui::GetWindowPos().y;
-
-	if (ImPlot::BeginPlot(y.name.c_str(), ImVec2(vMax.x - vMin.x, (vMax.y - vMin.y) * 0.95), ImPlotFlags_NoLegend | ImPlotFlags_NoTitle)) {
-		ImPlot::SetupAxes("date", y.name.c_str());
-		ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Time);
-		ImPlot::PlotLine(y.name.c_str(), timestamp.data(), y.data.data(), timestamp.size());
-		ImPlot::EndPlot();
-	}
-}
-
-auto selectFilesFromDialog() -> std::vector<std::filesystem::path> {
-	NFD::Guard nfdGuard;
-	NFD::UniquePathSet outPaths;
-
-	const auto filters = std::array<nfdfilteritem_t, 1>{
-		nfdfilteritem_t{"CSV", "csv"}
-	};
-
-	const auto result = NFD::OpenDialogMultiple(outPaths, filters.data(), filters.size());
-
-	if (result == NFD_OKAY) {
-		nfdpathsetsize_t numPaths;
-		NFD::PathSet::Count(outPaths, numPaths);
-		std::vector<std::filesystem::path> paths{};
-		paths.reserve(numPaths);
-
-		for (nfdpathsetsize_t i = 0; i < numPaths; ++i) {
-			NFD::UniquePathSetPath path;
-			NFD::PathSet::GetPath(outPaths, i, path);
-			paths.push_back(std::filesystem::path(path.get()));
+	auto loadCSVs(const std::vector<std::filesystem::path> &paths)
+		-> std::pair<std::vector<double>, std::unordered_map<std::string, data_dict>> {
+		if (paths.empty()) {
+			return {{}, {}};
 		}
 
-		return paths;
-	} else if (result == NFD_CANCEL) {
-		spdlog::info("User pressed cancel.");
-	} else {
-		spdlog::error("Error: {}", NFD::GetError());
+		std::vector<double> timestamp{};
+		std::unordered_map<std::string, data_dict> values{};
+
+		struct context {
+			size_t index;
+			std::filesystem::path path;
+			std::vector<double> timestamp{};
+			std::unordered_map<std::string, data_dict> values{};
+		};
+
+		std::vector<context> contexts{};
+		contexts.reserve(paths.size());
+
+		for (size_t i = 0; const auto &path : paths) {
+			contexts.push_back({.index = ++i, .path = path});
+		}
+
+		std::for_each(std::execution::par_unseq, contexts.begin(), contexts.end(), [&contexts](auto &ctx) {
+			spdlog::info("Loading file: {} ({}/{})...", ctx.path.filename().string(), ctx.index, contexts.size());
+			const auto [ts, val] = loadCSV(ctx.path);
+			ctx.timestamp = ts;
+			ctx.values = val;
+		});
+
+		spdlog::info("Merging data...");
+
+		for (const auto &ctx : contexts) {
+			timestamp.insert(timestamp.end(), ctx.timestamp.begin(), ctx.timestamp.end());
+
+			for (const auto &[key, value] : ctx.values) {
+				if (values.find(key) == values.end()) {
+					values[key] = value;
+				} else {
+					values[key].data.insert(values[key].data.end(), value.data.begin(), value.data.end());
+				}
+			}
+		}
+
+		return {timestamp, values};
 	}
 
-	return {};
-}
+	auto plotColumn(const std::vector<double> &timestamp, const data_dict &y) -> void {
+		ImVec2 v_min = ImGui::GetWindowContentRegionMin();
+		ImVec2 v_max = ImGui::GetWindowContentRegionMax();
+	
+		v_min.x += ImGui::GetWindowPos().x;
+		v_min.y += ImGui::GetWindowPos().y;
+		v_max.x += ImGui::GetWindowPos().x;
+		v_max.y += ImGui::GetWindowPos().y;
+	
+		if (ImPlot::BeginPlot(y.name.c_str(), ImVec2(v_max.x - v_min.x, (v_max.y - v_min.y) * 0.95),
+							  ImPlotFlags_NoLegend | ImPlotFlags_NoTitle)) {
+			ImPlot::SetupAxes("date", y.name.c_str());
+			ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Time);
+			ImPlot::PlotLine(y.name.c_str(), timestamp.data(), y.data.data(), timestamp.size());
+			ImPlot::EndPlot();
+		}
+	}
+
+	auto selectFilesFromDialog() -> std::vector<std::filesystem::path> {
+		NFD::Guard nfd_guard{};
+		NFD::UniquePathSet out_paths{};
+	
+		const auto filters = std::array<nfdfilteritem_t, 1>{
+			nfdfilteritem_t{"CSV", "csv"}
+		};
+	
+		const auto result = NFD::OpenDialogMultiple(out_paths, filters.data(), filters.size());
+	
+		if (result == NFD_OKAY) {
+			nfdpathsetsize_t num_paths;
+			NFD::PathSet::Count(out_paths, num_paths);
+			std::vector<std::filesystem::path> paths{};
+			paths.reserve(num_paths);
+	
+			for (nfdpathsetsize_t i = 0; i < num_paths; ++i) {
+				NFD::UniquePathSetPath path;
+				NFD::PathSet::GetPath(out_paths, i, path);
+				paths.push_back(std::filesystem::path(path.get()));
+			}
+	
+			return paths;
+		} else if (result == NFD_CANCEL) {
+			spdlog::info("User pressed cancel.");
+		} else {
+			spdlog::error("Error: {}", NFD::GetError());
+		}
+	
+		return {};
+	}
+}  // namespace
 
 // #pragma comment(linker, "/SUBSYSTEM:windows /ENTRY:mainCRTStartup")
 auto main(int argc, char ** argv) -> int {
@@ -246,6 +249,7 @@ auto main(int argc, char ** argv) -> int {
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 	ImGuiIO &io = ImGui::GetIO();
+	io.Fonts->AddFontFromFileTTF("FiraCode-Regular.ttf", 15);
 
 	// Setup Dear ImGui style
 	ImGui::StyleColorsDark();
@@ -256,7 +260,7 @@ auto main(int argc, char ** argv) -> int {
 	ImGui_ImplOpenGL3_Init(glsl_version);
 
 	bool show_plot_window = false;
-	ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+	const auto clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
 	// Main loop
 	bool done = false;
@@ -301,7 +305,7 @@ auto main(int argc, char ** argv) -> int {
 			if (ImGui::BeginTabBar("ImPlotDemoTabs")) {
 				for (const auto &dct : y) {
 					if (ImGui::BeginTabItem(dct.first.c_str())) {
-						Demo_LinePlots(x, dct.second);
+						plotColumn(x, dct.second);
 						ImGui::EndTabItem();
 					}
 				}
