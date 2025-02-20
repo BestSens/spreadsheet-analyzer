@@ -1,0 +1,35 @@
+---
+Checks: >-
+    -*,
+    bugprone-*,
+    -bugprone-easily-swappable-parameters,
+    cert-*,
+    -cert-dcl16-c,
+    clang-analyzer-*,
+    concurrency-*,
+    cppcoreguidelines-*,
+    -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+    -cppcoreguidelines-avoid-magic-numbers,
+    -cppcoreguidelines-pro-type-vararg,
+    misc-*,
+    -misc-no-recursion,
+    modernize-*,
+    performance-*,
+    hicpp-*,
+    -hicpp-braces-around-statements,
+    -hicpp-uppercase-literal-suffix,    
+    portability-*,
+    readability-*,
+    -readability-magic-numbers,
+    -readability-else-after-return,
+    -readability-braces-around-statements,
+    -readability-uppercase-literal-suffix,
+    -readability-identifier-length
+HeaderFilterRegex: ''
+FormatStyle: none
+CheckOptions:
+  - { key: readability-identifier-naming.ClassCase,     value: CamelCase  }
+  - { key: readability-identifier-naming.StructCase,    value: lower_case }
+  - { key: readability-identifier-naming.VariableCase,  value: lower_case }
+  - { key: readability-identifier-naming.FunctionCase,  value: camelBack  }
+  - { key: readability-identifier-naming.ParameterCase, value: lower_case }

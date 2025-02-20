@@ -1,0 +1,5 @@
+{
+	"cmake.configureArgs": [
+		"-DCPM_SOURCE_CACHE=C:/Users/Jan Schoeppach/.cache/CPM"
+	]
+}

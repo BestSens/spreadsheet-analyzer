@@ -1,0 +1,11 @@
+BasedOnStyle: Google
+ColumnLimit: 120
+IndentWidth: 4
+TabWidth: 4
+UseTab: Always 
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortBlocksOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: Never
+NamespaceIndentation: All
+AccessModifierOffset: -4
+IndentCaseLabels: false
