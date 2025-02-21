@@ -230,10 +230,28 @@ namespace {
 	
 		return {};
 	}
+
+	auto terminateHandler() -> void {
+		const auto ep = std::current_exception();
+
+		if (ep) {
+			try {
+				spdlog::critical("Terminating with uncaught exception");
+				std::rethrow_exception(ep);
+			} catch (const std::exception &e) {
+				spdlog::critical("\twith `what()` = \"{}\"", e.what());
+			} catch (...) {}  // NOLINT(bugprone-empty-catch)
+		} else {
+			spdlog::critical("Terminating without exception");
+		}
+		std::exit(EXIT_FAILURE);  // NOLINT(concurrency-mt-unsafe)
+	}
 }  // namespace
 
 // #pragma comment(linker, "/SUBSYSTEM:windows /ENTRY:mainCRTStartup")
 auto main(int argc, char ** argv) -> int {
+	std::set_terminate(terminateHandler);
+
 	std::vector<std::filesystem::path> paths{};
 	
 	{
