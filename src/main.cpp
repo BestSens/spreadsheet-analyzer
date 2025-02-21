@@ -1,5 +1,7 @@
 #include <chrono>
+#include <cstdlib>
 #include <ctime>
+#include <exception>
 #include <execution>
 #include <filesystem>
 #include <ranges>
@@ -24,7 +26,7 @@ namespace {
 		std::string name;
 		std::string unit;
 	
-		std::vector<double> timestamp{};
+		std::vector<time_t> timestamp{};
 		std::vector<double> data{};
 	};
 
@@ -148,7 +150,7 @@ namespace {
 			dd.unit = value.unit;
 
 			for (const auto &[date, val] : value.data) {
-				dd.timestamp.push_back(static_cast<double>(date));
+				dd.timestamp.push_back(date);
 				dd.data.push_back(val);
 			}
 
@@ -156,6 +158,11 @@ namespace {
 		}
 
 		return values;
+	}
+
+	auto plotDict(int i, void *data) -> ImPlotPoint {
+		const auto &dd = *static_cast<data_dict *>(data);
+		return ImPlotPoint(static_cast<double>(dd.timestamp[i]), dd.data[i]);
 	}
 
 	auto plotColumn(const data_dict &col) -> void {
@@ -184,13 +191,16 @@ namespace {
 			ImPlot::SetupAxes("date", col.name.c_str());
 			ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Time);
 			ImPlot::SetupAxisFormat(ImAxis_Y1, fmt.c_str());
-			ImPlot::PlotLine(col.name.c_str(), col.timestamp.data(), col.data.data(), col.timestamp.size());
+
+			// NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
+			auto *data = const_cast<void *>(static_cast<const void *>(&col));
+			ImPlot::PlotLineG(col.name.c_str(), plotDict, data, col.timestamp.size());
 			ImPlot::EndPlot();
 		}
 	}
 
 	auto selectFilesFromDialog() -> std::vector<std::filesystem::path> {
-		NFD::Guard nfd_guard{};
+		const NFD::Guard nfd_guard{};
 		NFD::UniquePathSet out_paths{};
 	
 		const auto filters = std::array<nfdfilteritem_t, 1>{
@@ -200,7 +210,7 @@ namespace {
 		const auto result = NFD::OpenDialogMultiple(out_paths, filters.data(), filters.size());
 	
 		if (result == NFD_OKAY) {
-			nfdpathsetsize_t num_paths;
+			nfdpathsetsize_t num_paths{};
 			NFD::PathSet::Count(out_paths, num_paths);
 			std::vector<std::filesystem::path> paths{};
 			paths.reserve(num_paths);
@@ -306,8 +316,8 @@ auto main(int argc, char ** argv) -> int {
 	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
 	SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
-	SDL_WindowFlags window_flags =
-		(SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
+	const auto window_flags =
+		static_cast<SDL_WindowFlags>(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
 	SDL_Window *window = SDL_CreateWindow("Spreadsheet Analyzer 2.0", 1280, 720, window_flags);
 	SDL_GLContext gl_context = SDL_GL_CreateContext(window);
 	SDL_GL_MakeCurrent(window, gl_context);
@@ -316,7 +326,7 @@ auto main(int argc, char ** argv) -> int {
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 	ImGuiIO &io = ImGui::GetIO();
-	io.IniFilename = NULL;
+	io.IniFilename = nullptr;
 	io.Fonts->AddFontFromFileTTF("FiraCode-Regular.ttf", 15);
 
 	// Setup Dear ImGui style
