@@ -131,6 +131,10 @@ namespace {
 
 		for (const auto &ctx : contexts) {
 			for (const auto &[key, value] : ctx.values) {
+				if (value.data.empty()) {
+					continue;
+				}
+				
 				if (values_temp.find(key) == values_temp.end()) {
 					values_temp[key] = value;
 				} else {
