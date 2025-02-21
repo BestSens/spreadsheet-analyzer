@@ -21,6 +21,7 @@ endif()
 add_executable(spreadsheet_analyzer
 	src/main.cpp
 	FiraCode-Regular.c
+	assets/manifest.manifest
 )
 
 target_compile_options(spreadsheet_analyzer PRIVATE
@@ -52,7 +53,18 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND CMAKE_BUILD_TYPE MATCHES "Debug")
 	)
 endif()
 
-target_link_libraries(spreadsheet_analyzer PRIVATE imgui implot SDL3::SDL3 Threads::Threads ${OPENGL_LIBRARIES} fmt spdlog csv cxxopts nfd)
+target_link_libraries(spreadsheet_analyzer PRIVATE
+	imgui
+	implot
+	SDL3::SDL3
+	Threads::Threads
+	${OPENGL_LIBRARIES}
+	fmt
+	spdlog
+	csv
+	cxxopts
+	nfd
+)
 target_include_directories(spreadsheet_analyzer PRIVATE ${OPENGL_INCLUDE_DIR})
 
 add_custom_command(
