@@ -41,11 +41,13 @@ namespace {
 	};
 
 	auto parseDate(const std::string &str) -> time_t {
-		std::tm t{};
 		std::istringstream ss(str);
 		ss.imbue(std::locale("de_DE.utf-8"));
-		ss >> std::get_time(&t, "%Y/%m/%d %H:%M:%S");
-		return std::mktime(&t);
+		
+		std::chrono::sys_seconds tp{};
+		ss >> std::chrono::parse("%Y/%m/%d %H:%M:%S", tp);
+		
+		return std::chrono::system_clock::to_time_t(tp);
 	}
 
 	auto stripUnit(std::string_view header) -> std::pair<std::string, std::string> {
@@ -398,7 +400,7 @@ auto main(int argc, char ** argv) -> int {
 
 		{
 			ImPlot::CreateContext();
-			ImPlot::GetStyle().UseLocalTime = true;
+			ImPlot::GetStyle().UseLocalTime = false;
 			ImPlot::GetStyle().UseISO8601 = true;
 			ImPlot::GetStyle().Use24HourClock = true;
 
