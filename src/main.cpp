@@ -85,14 +85,14 @@ namespace {
 			const auto date = parseDate(date_str);
 
 			for (const auto &col_name : col_names) {
-				auto val = row[col_name].get<std::string>();
-
-				const auto pos = val.find(',');
-				if (pos != std::string::npos) {
-					val = val.replace(pos, 1, ".");
-				}
-
 				try {
+					auto val = row[col_name].get<std::string>();
+
+					const auto pos = val.find(',');
+					if (pos != std::string::npos) {
+						val = val.replace(pos, 1, ".");
+					}
+
 					values[col_name].data.push_back({date, std::stod(val)});
 				} catch (const std::exception & /*e*/) {}
 			}
