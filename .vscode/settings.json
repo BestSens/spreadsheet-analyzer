@@ -95,6 +95,8 @@
 		"source_location": "cpp",
 		"stack": "cpp",
 		"typeindex": "cpp",
-		"variant": "cpp"
+		"variant": "cpp",
+		"resumable": "cpp",
+		"future": "cpp"
 	}
 }

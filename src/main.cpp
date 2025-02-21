@@ -4,6 +4,7 @@
 #include <exception>
 #include <execution>
 #include <filesystem>
+#include <future>
 #include <ranges>
 #include <sstream>
 #include <string_view>
@@ -17,6 +18,7 @@
 #include "csv.hpp"
 #include "cxxopts.hpp"
 #include "imgui.h"
+#include "imgui_stdlib.h"
 #include "implot.h"
 #include "nfd.hpp"
 #include "spdlog/spdlog.h"
@@ -25,7 +27,7 @@ extern "C" const unsigned int font_fira_code_compressed_size;
 extern "C" const unsigned char font_fira_code_compressed_data[];
 
 namespace {
-	struct data_dict {
+	struct data_dict_t {
 		std::string name;
 		std::string unit;
 	
@@ -106,13 +108,13 @@ namespace {
 		return values;
 	}
 
-	auto loadCSVs(const std::vector<std::filesystem::path> &paths) -> std::vector<data_dict> {
+	auto loadCSVs(const std::vector<std::filesystem::path> &paths) -> std::vector<data_dict_t> {
 		if (paths.empty()) {
 			return {};
 		}
 
 		std::unordered_map<std::string, immediate_dict> values_temp{};
-		std::vector<data_dict> values{};
+		std::vector<data_dict_t> values{};
 
 		struct context {
 			size_t index;
@@ -154,7 +156,7 @@ namespace {
 			std::sort(std::execution::par, value.data.begin(), value.data.end(),
 					  [](const auto &a, const auto &b) { return a.first < b.first; });
 
-			data_dict dd{};
+			data_dict_t dd{};
 			dd.name = value.name;
 			dd.unit = value.unit;
 
@@ -170,11 +172,11 @@ namespace {
 	}
 
 	auto plotDict(int i, void *data) -> ImPlotPoint {
-		const auto &dd = *static_cast<data_dict *>(data);
+		const auto &dd = *static_cast<data_dict_t *>(data);
 		return ImPlotPoint(static_cast<double>(dd.timestamp[i]), dd.data[i]);
 	}
 
-	auto plotColumn(const data_dict &col) -> void {
+	auto plotColumn(const data_dict_t &col) -> void {
 		ImVec2 v_min = ImGui::GetWindowContentRegionMin();
 		ImVec2 v_max = ImGui::GetWindowContentRegionMax();
 	
@@ -253,6 +255,7 @@ namespace {
 		} else {
 			spdlog::critical("Terminating without exception");
 		}
+
 		std::exit(EXIT_FAILURE);  // NOLINT(concurrency-mt-unsafe)
 	}
 }  // namespace
@@ -319,12 +322,9 @@ auto main(int argc, char ** argv) -> int {
 		}
 	}
 
-	const auto data_dict = loadCSVs(new_paths);
-
-	if (data_dict.empty()) {
-		spdlog::error("No valid data found.");
-		return EXIT_FAILURE;
-	}
+	std::future<std::vector<data_dict_t>> data_dict_f = std::async(std::launch::async, [new_paths]{
+		return loadCSVs(new_paths);
+	});
 
 	if (!SDL_Init(SDL_INIT_VIDEO)) {
 		spdlog::error("Error: {}", SDL_GetError());
@@ -366,6 +366,8 @@ auto main(int argc, char ** argv) -> int {
 	ImGui_ImplOpenGL3_Init(glsl_version);
 
 	bool show_plot_window = false;
+	bool has_data = false;
+	std::vector<data_dict_t> data_dict{};
 	const auto clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
 	// Main loop
@@ -398,28 +400,49 @@ auto main(int argc, char ** argv) -> int {
 		ImGui::NewFrame();
 		ImGui::GetStyle().WindowRounding = 0.0f;
 
-		{
+		if (!has_data) {
+			if (data_dict_f.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+				data_dict = data_dict_f.get();
+				has_data = true;
+			}
+		}
+
+		if (has_data) {
 			ImPlot::CreateContext();
 			ImPlot::GetStyle().UseLocalTime = false;
 			ImPlot::GetStyle().UseISO8601 = true;
 			ImPlot::GetStyle().Use24HourClock = true;
 
-			ImGui::SetNextWindowPos(ImVec2(0, 0));
-			ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, io.DisplaySize.y));
-			ImGui::Begin("File content", &show_plot_window, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
+			if (!data_dict.empty()) {
+				ImGui::SetNextWindowPos(ImVec2(0, 0));
+				ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, io.DisplaySize.y));
+				ImGui::Begin("File content", &show_plot_window,
+							 ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
 
-			if (ImGui::BeginTabBar("ImPlotDemoTabs", ImGuiTabBarFlags_Reorderable)) {
-				for (const auto &dct : data_dict) {
-					if (ImGui::BeginTabItem(dct.name.c_str())) {
-						plotColumn(dct);
-						ImGui::EndTabItem();
+				if (ImGui::BeginTabBar("ImPlotDemoTabs", ImGuiTabBarFlags_Reorderable)) {
+					for (const auto &dct : data_dict) {
+						if (ImGui::BeginTabItem(dct.name.c_str())) {
+							plotColumn(dct);
+							ImGui::EndTabItem();
+						}
 					}
+
+					ImGui::EndTabBar();
 				}
-
-				ImGui::EndTabBar();
+				ImGui::End();
+			} else {
+				ImGui::OpenPopup("Error");
+				if (ImGui::BeginPopupModal("Error")) {
+					ImGui::Text("No valid data found.");
+					ImGui::EndPopup();
+				}
 			}
-
-			ImGui::End();
+		} else {
+			ImGui::OpenPopup("Loading");
+			if (ImGui::BeginPopupModal("Loading")) {
+				ImGui::Text("Loading data...");
+				ImGui::EndPopup();
+			}
 		}
 
 		// Rendering
