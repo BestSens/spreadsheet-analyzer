@@ -406,7 +406,7 @@ auto main(int argc, char ** argv) -> int {
 			ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, io.DisplaySize.y));
 			ImGui::Begin("File content", &show_plot_window, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
 
-			if (ImGui::BeginTabBar("ImPlotDemoTabs")) {
+			if (ImGui::BeginTabBar("ImPlotDemoTabs", ImGuiTabBarFlags_Reorderable)) {
 				for (const auto &dct : data_dict) {
 					if (ImGui::BeginTabItem(dct.name.c_str())) {
 						plotColumn(dct);
