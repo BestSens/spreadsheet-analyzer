@@ -103,7 +103,7 @@ namespace {
 
 	auto loadCSVs(const std::vector<std::filesystem::path> &paths) -> std::vector<data_dict> {
 		if (paths.empty()) {
-			return {{}, {}};
+			return {};
 		}
 
 		std::unordered_map<std::string, immediate_dict> values_temp{};
