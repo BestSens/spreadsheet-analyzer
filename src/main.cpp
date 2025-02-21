@@ -1,3 +1,4 @@
+#include <atomic>
 #include <chrono>
 #include <cstdlib>
 #include <ctime>
@@ -68,7 +69,8 @@ namespace {
 		return {std::string(name), std::string(unit)};
 	}
 
-	auto loadCSV(const std::filesystem::path &path) -> std::unordered_map<std::string, immediate_dict> {
+	auto loadCSV(const std::filesystem::path &path, const std::atomic<bool> &stop_loading)
+		-> std::unordered_map<std::string, immediate_dict> {
 		using namespace csv;
 
 		std::vector<std::string> col_names{};
@@ -102,13 +104,22 @@ namespace {
 
 					values[col_name].data.push_back({date, std::stod(val)});
 				} catch (const std::exception & /*e*/) {}
+
+				if (stop_loading) {
+					break;
+				}
+			}
+
+			if (stop_loading) {
+				break;
 			}
 		}
 
 		return values;
 	}
 
-	auto loadCSVs(const std::vector<std::filesystem::path> &paths) -> std::vector<data_dict_t> {
+	auto loadCSVs(const std::vector<std::filesystem::path> &paths, std::atomic<size_t> &finished,
+				  std::atomic<bool> &stop_loading) -> std::vector<data_dict_t> {
 		if (paths.empty()) {
 			return {};
 		}
@@ -129,10 +140,23 @@ namespace {
 			contexts.push_back({.index = ++i, .path = path});
 		}
 
-		std::for_each(std::execution::par_unseq, contexts.begin(), contexts.end(), [&contexts](auto &ctx) {
-			spdlog::info("Loading file: {} ({}/{})...", ctx.path.filename().string(), ctx.index, contexts.size());
-			ctx.values = loadCSV(ctx.path);
-		});
+		std::for_each(std::execution::par_unseq, contexts.begin(), contexts.end(),
+					  [&contexts, &stop_loading, &finished](auto &ctx) {
+						  if (!stop_loading) {
+							  spdlog::info("Loading file: {} ({}/{})...", ctx.path.filename().string(), ctx.index,
+										   contexts.size());
+							  try {
+								  ctx.values = loadCSV(ctx.path, stop_loading);
+							  } catch (const std::exception &e) {
+								  spdlog::error("{}", e.what());
+							  }
+							  ++finished;
+						  }
+					  });
+
+		if (stop_loading) {
+			return {};
+		}
 
 		spdlog::info("Merging data...");
 
@@ -322,9 +346,12 @@ auto main(int argc, char ** argv) -> int {
 		}
 	}
 
-	std::future<std::vector<data_dict_t>> data_dict_f = std::async(std::launch::async, [new_paths]{
-		return loadCSVs(new_paths);
-	});
+	std::atomic<size_t> finished{0};
+	std::atomic<bool> stop_loading{false};
+
+	std::future<std::vector<data_dict_t>> data_dict_f =
+		std::async(std::launch::async,
+				   [new_paths, &finished, &stop_loading] { return loadCSVs(new_paths, finished, stop_loading); });
 
 	if (!SDL_Init(SDL_INIT_VIDEO)) {
 		spdlog::error("Error: {}", SDL_GetError());
@@ -387,10 +414,21 @@ auto main(int argc, char ** argv) -> int {
 		while (SDL_PollEvent(&event)) {
 			ImGui_ImplSDL3_ProcessEvent(&event);
 			if (event.type == SDL_EVENT_QUIT) {
-				done = true;
+				stop_loading.store(true);
 			}
 			if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && event.window.windowID == SDL_GetWindowID(window)) {
+				stop_loading.store(true);
+			}
+		}
+
+		if (stop_loading) {
+			if (has_data || data_dict_f.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
 				done = true;
+			} else {
+				ImGui::OpenPopup("Waiting for exit...");
+				if (ImGui::BeginPopupModal("Waiting for exit...")) {
+					ImGui::EndPopup();
+				}
 			}
 		}
 
@@ -438,9 +476,12 @@ auto main(int argc, char ** argv) -> int {
 				}
 			}
 		} else {
-			ImGui::OpenPopup("Loading");
-			if (ImGui::BeginPopupModal("Loading")) {
-				ImGui::Text("Loading data...");
+			ImGui::SetNextWindowSize(ImVec2(250.0f, 65.0f));
+			ImGui::OpenPopup("Loading data...");
+			if (ImGui::BeginPopupModal("Loading data...")) {
+				const auto progress = static_cast<float>(finished.load()) / new_paths.size();
+				const auto label = fmt::format("{:.0f}% ({}/{})", progress * 100.0f, finished.load(), new_paths.size());
+				ImGui::ProgressBar(progress, ImVec2(234.0f, 25.0f), label.c_str());
 				ImGui::EndPopup();
 			}
 		}
