@@ -10,6 +10,14 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cpm")
 
+option(USE_LTO "Enable LTO" ON)
+
+if(USE_LTO AND NOT (CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "MinSizeDbg"))
+	include(CheckIPOSupported)
+	check_ipo_supported(RESULT supported OUTPUT error)
+	set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+endif()
+
 add_executable(spreadsheet_analyzer
 	src/main.cpp
 )

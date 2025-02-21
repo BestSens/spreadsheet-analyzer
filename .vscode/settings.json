@@ -77,6 +77,24 @@
 		"execution": "cpp",
 		"deque": "cpp",
 		"queue": "cpp",
-		"numeric": "cpp"
+		"numeric": "cpp",
+		"any": "cpp",
+		"bitset": "cpp",
+		"cfenv": "cpp",
+		"codecvt": "cpp",
+		"complex": "cpp",
+		"condition_variable": "cpp",
+		"cstdarg": "cpp",
+		"set": "cpp",
+		"unordered_set": "cpp",
+		"fstream": "cpp",
+		"functional": "cpp",
+		"iostream": "cpp",
+		"random": "cpp",
+		"regex": "cpp",
+		"source_location": "cpp",
+		"stack": "cpp",
+		"typeindex": "cpp",
+		"variant": "cpp"
 	}
 }
