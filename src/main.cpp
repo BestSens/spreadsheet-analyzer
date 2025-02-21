@@ -268,7 +268,26 @@ auto main(int argc, char ** argv) -> int {
 		return a.filename() < b.filename();
 	});
 
-	const auto data_dict = loadCSVs(paths);
+	std::vector<std::filesystem::path> new_paths{};
+
+	for (auto& path : paths) {
+		if (std::filesystem::is_directory(path)) {
+			for (const auto& entry : std::filesystem::directory_iterator(path)) {
+				if (entry.path().extension() == ".csv") {
+					new_paths.push_back(entry.path());
+				}
+			}
+		} else {
+			new_paths.push_back(path);
+		}
+	}
+
+	const auto data_dict = loadCSVs(new_paths);
+
+	if (data_dict.empty()) {
+		spdlog::error("No valid data found.");
+		return EXIT_FAILURE;
+	}
 
 	if (!SDL_Init(SDL_INIT_VIDEO)) {
 		spdlog::error("Error: {}", SDL_GetError());
