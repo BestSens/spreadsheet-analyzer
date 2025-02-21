@@ -22,3 +22,7 @@ add_library(imgui
 )
 target_include_directories(imgui PUBLIC ${imgui_external_SOURCE_DIR})
 target_link_libraries(imgui PUBLIC SDL3::SDL3)
+
+add_executable(binary_to_compressed
+	${imgui_external_SOURCE_DIR}/misc/fonts/binary_to_compressed_c.cpp
+)

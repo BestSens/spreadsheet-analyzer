@@ -21,6 +21,9 @@
 #include "nfd.hpp"
 #include "spdlog/spdlog.h"
 
+extern "C" const unsigned int font_fira_code_compressed_size;
+extern "C" const unsigned char font_fira_code_compressed_data[];
+
 namespace {
 	struct data_dict {
 		std::string name;
@@ -349,7 +352,8 @@ auto main(int argc, char ** argv) -> int {
 	ImGui::CreateContext();
 	ImGuiIO &io = ImGui::GetIO();
 	io.IniFilename = nullptr;
-	io.Fonts->AddFontFromFileTTF("FiraCode-Regular.ttf", 15);
+	io.Fonts->AddFontFromMemoryCompressedTTF(static_cast<const void *>(font_fira_code_compressed_data),
+											 static_cast<int>(font_fira_code_compressed_size), 15.0f);
 
 	// Setup Dear ImGui style
 	ImGui::StyleColorsDark();
