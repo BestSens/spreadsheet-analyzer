@@ -22,7 +22,6 @@ add_executable(spreadsheet_analyzer
 	src/main.cpp
 	src/winapi.cpp
 	src/window_icon.c
-	FiraCode-Regular.c
 )
 
 if(WIN32)
@@ -54,6 +53,8 @@ include(implot)
 include(csv-parser)
 include(add_cxxopts)
 include(nativefiledialog-extended)
+include(roboto_sans)
+include(roboto_mono)
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND CMAKE_BUILD_TYPE MATCHES "Debug")
 	target_compile_options(spreadsheet_analyzer PRIVATE
@@ -78,15 +79,7 @@ target_link_libraries(spreadsheet_analyzer PRIVATE
 	csv
 	cxxopts
 	nfd
+	roboto_sans
+	roboto_mono
 )
 target_include_directories(spreadsheet_analyzer PRIVATE ${OPENGL_INCLUDE_DIR})
-
-add_custom_command(
-	OUTPUT FiraCode-Regular.c
-	COMMAND ${CMAKE_CURRENT_BINARY_DIR}/binary_to_compressed
-		-nostatic
-		${CMAKE_CURRENT_SOURCE_DIR}/assets/FiraCode-Regular.ttf
-		font_fira_code
-		> FiraCode-Regular.c
-	DEPENDS binary_to_compressed
-)

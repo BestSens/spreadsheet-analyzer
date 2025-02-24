@@ -30,8 +30,11 @@
 #include "spdlog/spdlog.h"
 #include "winapi.hpp"
 
-extern "C" const unsigned int font_fira_code_compressed_size;
-extern "C" const unsigned char font_fira_code_compressed_data[];
+extern "C" const unsigned int font_roboto_mono_compressed_size;
+extern "C" const unsigned char font_roboto_mono_compressed_data[];
+extern "C" const unsigned int font_roboto_sans_compressed_size;
+extern "C" const unsigned char font_roboto_sans_compressed_data[];
+
 extern "C" const unsigned char icon_data[];
 extern "C" const size_t icon_data_size;
 
@@ -499,8 +502,11 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 	ImGuiIO &io = ImGui::GetIO();
 	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 	io.IniFilename = nullptr;
-	io.Fonts->AddFontFromMemoryCompressedTTF(static_cast<const void *>(font_fira_code_compressed_data),
-											 static_cast<int>(font_fira_code_compressed_size), 15.0f);
+	io.Fonts->AddFontFromMemoryCompressedTTF(static_cast<const void *>(font_roboto_sans_compressed_data),
+											 static_cast<int>(font_roboto_sans_compressed_size), 16.0f);
+	io.Fonts->AddFontFromMemoryCompressedTTF(static_cast<const void *>(font_roboto_mono_compressed_data),
+											 static_cast<int>(font_roboto_mono_compressed_size), 16.0f);
+	io.FontDefault = io.Fonts->Fonts[0];
 	io.FontGlobalScale = display_scale;
 
 	// Setup Dear ImGui style
@@ -651,7 +657,9 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 				ImGui::SameLine();
 
 				ImGui::BeginChild("File content", ImVec2(window_size.x - 255, window_size.y - 20));
+				ImGui::PushFont(io.Fonts->Fonts[1]);
 				plotDataInSubplots(data_dict);
+				ImGui::PopFont();
 				ImGui::EndChild();
 			} else {
 				ImGui::OpenPopup("Error", ImGuiWindowFlags_NoResize);
