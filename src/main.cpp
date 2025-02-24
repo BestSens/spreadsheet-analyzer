@@ -177,7 +177,7 @@ namespace {
 			return {};
 		}
 
-		spdlog::info("Merging data...");
+		spdlog::debug("Merging data...");
 
 		for (const auto &ctx : contexts) {
 			for (const auto &[key, value] : ctx.values) {
@@ -352,7 +352,7 @@ namespace {
 	
 			return paths;
 		} else if (result == NFD_CANCEL) {
-			spdlog::info("User pressed cancel.");
+			spdlog::debug("User pressed cancel.");
 		} else {
 			spdlog::error("Error: {}", NFD::GetError());
 		}
@@ -414,6 +414,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 		options.add_options()
 			("h,help", "Print usage")
 			("filename", "CSV file to load", cxxopts::value<std::vector<std::string>>(), "FILE")
+			("v,verbose", "verbose output")
 			;
 
 		try {
@@ -429,6 +430,11 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 				for (const auto& file : result["filename"].as<std::vector<std::string>>()) {
 					paths.push_back(std::filesystem::path(file));
 				}
+			}
+
+			if (result.count("verbose") == 1u) {
+				spdlog::set_level(spdlog::level::debug);
+				spdlog::info("verbose output enabled");
 			}
 		} catch (const std::exception& e) {
 			spdlog::critical(e.what());
@@ -462,7 +468,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 		return -1;
 	}
 
-	spdlog::info("SDL Initialized");
+	spdlog::debug("SDL Initialized");
 
 	const char *glsl_version = "#version 130";
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
