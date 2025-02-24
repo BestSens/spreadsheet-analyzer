@@ -13,8 +13,11 @@
 #include <unordered_map>
 #include <vector>
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wlanguage-extension-token"
 #include "SDL3/SDL_main.h"
 #include "SDL3/SDL_opengl.h"
+#pragma clang diagnostic pop
 #include "SDL3_image/SDL_image.h"
 #include "backends/imgui_impl_opengl3.h"
 #include "backends/imgui_impl_sdl3.h"
