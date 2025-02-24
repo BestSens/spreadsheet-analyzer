@@ -1,12 +1,15 @@
 #include "winapi.hpp"
 
+#ifdef WIN32
 #include <windows.h>
+#endif
 
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 auto isLightTheme() -> bool {
+#ifdef WIN32
 	// based on
 	// https://stackoverflow.com/questions/51334674/how-to-detect-windows-10-light-dark-mode-in-win32-application
 
@@ -26,4 +29,7 @@ auto isLightTheme() -> bool {
 	auto i = int(buffer[3] << 24 | buffer[2] << 16 | buffer[1] << 8 | buffer[0]);
 
 	return i == 1;
+#else
+	return false;
+#endif
 }

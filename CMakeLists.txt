@@ -23,9 +23,14 @@ add_executable(spreadsheet_analyzer
 	src/winapi.cpp
 	src/window_icon.c
 	FiraCode-Regular.c
-	assets/manifest.manifest
-	assets/app.rc
 )
+
+if(WIN32)
+	target_sources(spreadsheet_analyzer PRIVATE
+		assets/manifest.manifest
+		assets/app.rc
+	)
+endif()
 
 target_include_directories(spreadsheet_analyzer PRIVATE
 	inc
@@ -78,7 +83,7 @@ target_include_directories(spreadsheet_analyzer PRIVATE ${OPENGL_INCLUDE_DIR})
 
 add_custom_command(
 	OUTPUT FiraCode-Regular.c
-	COMMAND ${CMAKE_CURRENT_BINARY_DIR}/binary_to_compressed.exe
+	COMMAND ${CMAKE_CURRENT_BINARY_DIR}/binary_to_compressed
 		-nostatic
 		${CMAKE_CURRENT_SOURCE_DIR}/assets/FiraCode-Regular.ttf
 		font_fira_code
