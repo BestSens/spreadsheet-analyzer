@@ -302,7 +302,7 @@ auto main(int argc, char ** argv) -> int {
 	std::vector<std::filesystem::path> paths{};
 	
 	{
-		cxxopts::Options options(argv[0], "ImPlot Demo using ImGui and SDL2");
+		cxxopts::Options options(argv[0], "Spreadsheet Analyzer");
 
 		options.add_options()
 			("h,help", "Print usage")
