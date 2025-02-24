@@ -15,6 +15,7 @@
 
 #include "SDL3/SDL_main.h"
 #include "SDL3/SDL_opengl.h"
+#include "SDL3_image/SDL_image.h"
 #include "backends/imgui_impl_opengl3.h"
 #include "backends/imgui_impl_sdl3.h"
 #include "csv.hpp"
@@ -27,6 +28,8 @@
 
 extern "C" const unsigned int font_fira_code_compressed_size;
 extern "C" const unsigned char font_fira_code_compressed_data[];
+extern "C" const unsigned char icon_data[];
+extern "C" const size_t icon_data_size;
 
 namespace {
 	struct data_dict_t {
@@ -377,6 +380,9 @@ auto main(int argc, char ** argv) -> int {
 	SDL_GLContext gl_context = SDL_GL_CreateContext(window);
 	SDL_GL_MakeCurrent(window, gl_context);
 	SDL_GL_SetSwapInterval(1);	// Enable vsync
+
+	auto* window_icon = IMG_LoadPNG_IO(SDL_IOFromMem(const_cast<unsigned char*>(icon_data), icon_data_size));
+	SDL_SetWindowIcon(window, window_icon);
 
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();

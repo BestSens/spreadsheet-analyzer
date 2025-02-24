@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.24)
 
 project(spreadsheet-analyzer-2 VERSION 2.0.0)
 
-set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD 23)
 set(CMAKE_C_EXTENSIONS OFF)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
@@ -20,8 +20,14 @@ endif()
 
 add_executable(spreadsheet_analyzer
 	src/main.cpp
+	src/window_icon.c
 	FiraCode-Regular.c
 	assets/manifest.manifest
+	assets/app.rc
+)
+
+target_include_directories(spreadsheet_analyzer PRIVATE
+	inc
 )
 
 target_compile_options(spreadsheet_analyzer PRIVATE
@@ -35,6 +41,7 @@ find_package(OpenGL REQUIRED)
 
 include(imgui)
 include(sdl)
+include(sdl-image)
 include(fmt)
 include(spdlog)
 include(implot)
@@ -57,6 +64,7 @@ target_link_libraries(spreadsheet_analyzer PRIVATE
 	imgui
 	implot
 	SDL3::SDL3
+	SDL3_image-static
 	Threads::Threads
 	${OPENGL_LIBRARIES}
 	fmt
