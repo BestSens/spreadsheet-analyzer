@@ -28,6 +28,7 @@
 #include "implot.h"
 #include "nfd.hpp"
 #include "spdlog/spdlog.h"
+#include "winapi.hpp"
 
 extern "C" const unsigned int font_fira_code_compressed_size;
 extern "C" const unsigned char font_fira_code_compressed_data[];
@@ -442,7 +443,16 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 											 static_cast<int>(font_fira_code_compressed_size), 15.0f);
 
 	// Setup Dear ImGui style
-	ImGui::StyleColorsClassic();
+	try {
+		if (isLightTheme()) {
+			ImGui::StyleColorsLight();
+		} else {
+			ImGui::StyleColorsDark();
+		}
+	} catch (const std::exception &e) {
+		spdlog::error("{}", e.what());
+		ImGui::StyleColorsDark();
+	}
 
 	// Setup Platform/Renderer backends
 	ImGui_ImplSDL3_InitForOpenGL(window, gl_context);

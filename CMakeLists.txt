@@ -20,6 +20,7 @@ endif()
 
 add_executable(spreadsheet_analyzer
 	src/main.cpp
+	src/winapi.cpp
 	src/window_icon.c
 	FiraCode-Regular.c
 	assets/manifest.manifest
