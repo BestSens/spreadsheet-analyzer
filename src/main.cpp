@@ -392,10 +392,13 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 	size_t max_loaded_data_points_current{0};
 	std::atomic<bool> stop_loading{false};
 	bool parallel_loading = false;
+	std::chrono::time_point<std::chrono::steady_clock> loading_start_time{};
+	std::chrono::time_point<std::chrono::steady_clock> loading_end_time{};
 
 	auto paths_expanded = preparePaths(paths);
 	required_files = paths_expanded.size();
 
+	loading_start_time = std::chrono::steady_clock::now();
 	std::future<std::vector<data_dict_t>> data_dict_f = std::async(
 		std::launch::async,
 		[paths_expanded, &finished_files, &stop_loading, max_data_points, &max_loaded_data_points, parallel_loading] {
@@ -484,6 +487,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 		if (ImGui::BeginMainMenuBar()) {
 			if (ImGui::BeginMenu("File")) {
 				if (ImGui::MenuItem("Open", "Ctrl+O", &open_selected)) {}
+				ImGui::Separator();
 				if (ImGui::MenuItem("Exit", "Ctrl+Q", &done)) {}
 				ImGui::EndMenu();
 			}
@@ -493,12 +497,16 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 				ImGui::Separator();
 				if (ImGui::MenuItem("Parallel loading", nullptr, &parallel_loading)) {}
 				const auto dp_str = fmt::format("Loaded data points: {}", max_loaded_data_points_current);
-				ImGui::Text("%s", dp_str.c_str());  // NOLINT(hicpp-vararg)
+				ImGui::Text("%s", dp_str.c_str());	// NOLINT(hicpp-vararg)
 				ImGui::InputInt("Max data points", &max_data_points);
 				ImGui::Separator();
 				const auto fps_str = fmt::format("{:.3f} ms/frame ({:.1f} FPS)", 1000.0f / ImGui::GetIO().Framerate,
 												 ImGui::GetIO().Framerate);
-				ImGui::Text("%s", fps_str.c_str());  // NOLINT(hicpp-vararg)
+				ImGui::Text("%s", fps_str.c_str());	 // NOLINT(hicpp-vararg)
+				const auto last_loading_str =
+					fmt::format("Last loading took {:.3f} s",
+								std::chrono::duration<double>(loading_end_time - loading_start_time).count());
+				ImGui::Text("%s", last_loading_str.c_str());  // NOLINT(hicpp-vararg)
 				ImGui::EndMenu();
 			}
 
@@ -520,6 +528,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 				required_files = paths_expanded.size();
 				stop_loading.store(false);
 				max_loaded_data_points.store(0);
+				loading_start_time = std::chrono::steady_clock::now();
 
 				data_dict_f =
 					std::async(std::launch::async, [paths_expanded, &finished_files, &stop_loading, max_data_points,
@@ -595,6 +604,8 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 				has_data = true;
 				show_plot_window = true;
+
+				loading_end_time = std::chrono::steady_clock::now();
 			}
 		}
 
