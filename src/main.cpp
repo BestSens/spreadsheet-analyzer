@@ -39,6 +39,7 @@ namespace {
 	struct data_dict_t {
 		std::string name;
 		std::string unit;
+		bool visible{false};
 	
 		std::vector<time_t> timestamp{};
 		std::vector<double> data{};
@@ -244,7 +245,7 @@ namespace {
 		return ImPlotPoint(static_cast<double>(dd.timestamp[i]), dd.data[i]);
 	}
 
-	auto plotColumn(const data_dict_t &col) -> void {
+	auto plotColumn(const data_dict_t &col, size_t n_selected) -> void {
 		ImVec2 v_min = ImGui::GetWindowContentRegionMin();
 		ImVec2 v_max = ImGui::GetWindowContentRegionMax();
 	
@@ -252,8 +253,11 @@ namespace {
 		v_min.y += ImGui::GetWindowPos().y;
 		v_max.x += ImGui::GetWindowPos().x;
 		v_max.y += ImGui::GetWindowPos().y;
-	
-		if (ImPlot::BeginPlot(col.name.c_str(), ImVec2(v_max.x - v_min.x, (v_max.y - v_min.y) * 0.95f),
+
+		const auto plot_height = (v_max.y - v_min.y) / static_cast<float>(n_selected);
+		const auto plot_width = v_max.x - v_min.x;
+
+		if (ImPlot::BeginPlot(col.name.c_str(), ImVec2(plot_width, plot_height),
 							  ImPlotFlags_NoLegend | ImPlotFlags_NoTitle)) {
 			const auto fmt = [&col]() -> std::string {
 				if (col.unit.empty()) {
@@ -351,7 +355,7 @@ namespace {
 	}
 }  // namespace
 
-// #pragma comment(linker, "/SUBSYSTEM:windows /ENTRY:mainCRTStartup")
+#pragma comment(linker, "/SUBSYSTEM:windows /ENTRY:mainCRTStartup")
 auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognitive-complexity)
 	std::set_terminate(terminateHandler);
 
@@ -424,8 +428,8 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 16);
 	SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
-	const auto window_flags =
-		static_cast<SDL_WindowFlags>(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
+	const auto window_flags = static_cast<SDL_WindowFlags>(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE |
+														   SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_MAXIMIZED);
 	SDL_Window *window = SDL_CreateWindow("Spreadsheet Analyzer 2.0", 1280, 720, window_flags);
 	SDL_GLContext gl_context = SDL_GL_CreateContext(window);
 	SDL_GL_MakeCurrent(window, gl_context);
@@ -438,6 +442,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 	ImGuiIO &io = ImGui::GetIO();
+	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 	io.IniFilename = nullptr;
 	io.Fonts->AddFontFromMemoryCompressedTTF(static_cast<const void *>(font_fira_code_compressed_data),
 											 static_cast<int>(font_fira_code_compressed_size), 15.0f);
@@ -560,20 +565,33 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 				if (!data_dict.empty()) {
 					ImGui::SetNextWindowPos(ImVec2(5, menu_size.y + 5), ImGuiCond_FirstUseEver);
-					ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x - 10, io.DisplaySize.y - menu_size.y - 10),
-											 ImGuiCond_FirstUseEver);
+					ImGui::SetNextWindowSize(ImVec2(250, io.DisplaySize.y - menu_size.y - 10),
+											 ImGuiCond_FirstUseEver);		 
+					ImGui::Begin("Column List", nullptr);
+					const auto col_list_size = ImGui::GetWindowSize();
+					if (ImGui::BeginListBox("Columns", ImVec2(col_list_size.x, col_list_size.y))) {
+						for (auto &dct : data_dict) {
+							if (ImGui::Selectable(dct.name.c_str(), &dct.visible)) {}
+						}
+						ImGui::EndListBox();
+					}
+					ImGui::End();
+
+					ImGui::SetNextWindowPos(ImVec2(10 + col_list_size.x, menu_size.y + 5), ImGuiCond_FirstUseEver);
+					ImGui::SetNextWindowSize(
+						ImVec2(io.DisplaySize.x - 10 - col_list_size.x, io.DisplaySize.y - menu_size.y - 10),
+						ImGuiCond_FirstUseEver);
 					ImGui::Begin("File content", &show_plot_window, ImGuiWindowFlags_NoCollapse);
 
-					if (ImGui::BeginTabBar("ImPlotDemoTabs", ImGuiTabBarFlags_Reorderable)) {
-						for (const auto &dct : data_dict) {
-							if (ImGui::BeginTabItem(dct.name.c_str())) {
-								plotColumn(dct);
-								ImGui::EndTabItem();
-							}
-						}
+					const auto n_selected =
+						std::count_if(data_dict.begin(), data_dict.end(), [](const auto &dct) { return dct.visible; });
 
-						ImGui::EndTabBar();
+					for (const auto &dct : data_dict) {
+						if (dct.visible) {
+							plotColumn(dct, n_selected);
+						}
 					}
+
 					ImGui::End();
 				} else {
 					ImGui::OpenPopup("Error", ImGuiWindowFlags_NoResize);
@@ -609,6 +627,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 				if (!temp_data_dict.empty()) {
 					data_dict = std::move(temp_data_dict);
+					data_dict.at(0).visible = true;
 					max_loaded_data_points_current = max_loaded_data_points.load();
 				}
 
