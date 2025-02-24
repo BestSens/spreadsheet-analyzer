@@ -319,7 +319,7 @@ namespace {
 }  // namespace
 
 // #pragma comment(linker, "/SUBSYSTEM:windows /ENTRY:mainCRTStartup")
-auto main(int argc, char ** argv) -> int {
+auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognitive-complexity)
 	std::set_terminate(terminateHandler);
 
 	std::vector<std::filesystem::path> paths{};
@@ -380,7 +380,7 @@ auto main(int argc, char ** argv) -> int {
 
 	// Create window with graphics context
 	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 16);
 	SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
 	const auto window_flags =
 		static_cast<SDL_WindowFlags>(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
@@ -439,11 +439,11 @@ auto main(int argc, char ** argv) -> int {
 			}
 
 			if (event.type == SDL_EVENT_KEY_DOWN) {
-				if (event.key.key == SDLK_O && event.key.mod & SDL_KMOD_CTRL) {
+				if (event.key.key == SDLK_O && (event.key.mod & SDL_KMOD_CTRL) != 0) {
 					open_selected = true;
 				}
 
-				if (event.key.key == SDLK_Q && event.key.mod & SDL_KMOD_CTRL) {
+				if (event.key.key == SDLK_Q && (event.key.mod & SDL_KMOD_CTRL) != 0) {
 					done = true;
 				}
 			}
@@ -471,18 +471,19 @@ auto main(int argc, char ** argv) -> int {
 		}
 
 		if (open_selected) {
-			data_dict.clear();
-			has_data = false;
-			finished_files.store(0);
-
 			paths = selectFilesFromDialog();
 
-			paths_expanded = preparePaths(paths);
-			required_files = paths_expanded.size();
-			stop_loading.store(false);
-			data_dict_f = std::async(std::launch::async, [paths_expanded, &finished_files, &stop_loading] {
-				return loadCSVs(paths_expanded, finished_files, stop_loading);
-			});
+			if (!paths.empty()) {
+				finished_files.store(0);
+
+				paths_expanded = preparePaths(paths);
+				required_files = paths_expanded.size();
+				stop_loading.store(false);
+				
+				data_dict_f = std::async(std::launch::async, [paths_expanded, &finished_files, &stop_loading] {
+					return loadCSVs(paths_expanded, finished_files, stop_loading);
+				});
+			}
 
 			open_selected = false;
 		}
@@ -495,7 +496,7 @@ auto main(int argc, char ** argv) -> int {
 				ImPlot::GetStyle().Use24HourClock = true;
 
 				if (!data_dict.empty()) {
-					ImGui::SetNextWindowPos(ImVec2(5, menu_size.y + 5));
+					ImGui::SetNextWindowPos(ImVec2(5, menu_size.y + 5), ImGuiCond_FirstUseEver);
 					ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x - 10, io.DisplaySize.y - menu_size.y - 10),
 											 ImGuiCond_FirstUseEver);
 					ImGui::Begin("File content", &show_plot_window, ImGuiWindowFlags_NoCollapse);
@@ -523,7 +524,9 @@ auto main(int argc, char ** argv) -> int {
 					data_dict.clear();
 				}
 			}
-		} else {
+		}
+
+		if (data_dict_f.valid()) {
 			ImGui::SetNextWindowSize(ImVec2(250.0f, 90.0f));
 			ImGui::OpenPopup("Loading data...");
 			if (ImGui::BeginPopupModal("Loading data...", nullptr,
@@ -545,6 +548,13 @@ auto main(int argc, char ** argv) -> int {
 			}
 		}
 
+		ImGui::SetNextWindowPos(ImVec2(5, io.DisplaySize.y - 50), ImGuiCond_FirstUseEver);
+		ImGui::Begin("Debug", nullptr, ImGuiWindowFlags_NoResize);
+		const auto debug_str = fmt::format("Application average {:.3f} ms/frame ({:.1f} FPS)",
+											1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+		ImGui::Text("%s", debug_str.c_str());  // NOLINT(hicpp-vararg)
+		ImGui::End();
+
 		// Rendering
 		ImGui::Render();
 		glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
@@ -554,8 +564,6 @@ auto main(int argc, char ** argv) -> int {
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 		SDL_GL_SwapWindow(window);
 	}
-
-	spdlog::debug("Graceful shutdown");
 
 	// Cleanup
 	ImGui_ImplOpenGL3_Shutdown();
