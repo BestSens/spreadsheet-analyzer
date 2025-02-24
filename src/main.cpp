@@ -109,7 +109,11 @@ namespace {
 						val = val.replace(pos, 1, ".");
 					}
 
-					values[col_name].data.push_back({date, std::stod(val)});
+					const auto dbl_val = std::stod(val);
+
+					if (std::isfinite(dbl_val)) {
+						values[col_name].data.push_back({date, dbl_val});
+					}
 				} catch (const std::exception & /*e*/) {}
 
 				if (stop_loading) {
