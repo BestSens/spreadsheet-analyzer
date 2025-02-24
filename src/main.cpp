@@ -130,7 +130,8 @@ namespace {
 	}
 
 	auto loadCSVs(const std::vector<std::filesystem::path> &paths, std::atomic<size_t> &finished,
-				  std::atomic<bool> &stop_loading) -> std::vector<data_dict_t> {
+				  std::atomic<bool> &stop_loading, int max_data_points, std::atomic<size_t> &max_loaded_data_points,
+				  bool parallel_loading) -> std::vector<data_dict_t> {
 		if (paths.empty()) {
 			return {};
 		}
@@ -151,19 +152,24 @@ namespace {
 			contexts.push_back({.index = ++i, .path = path});
 		}
 
-		std::for_each(std::execution::par_unseq, contexts.begin(), contexts.end(),
-					  [&contexts, &stop_loading, &finished](auto &ctx) {
-						  if (!stop_loading) {
-							  spdlog::info("Loading file: {} ({}/{})...", ctx.path.filename().string(), ctx.index,
-										   contexts.size());
-							  try {
-								  ctx.values = loadCSV(ctx.path, stop_loading);
-							  } catch (const std::exception &e) {
-								  spdlog::error("{}", e.what());
-							  }
-							  ++finished;
-						  }
-					  });
+		auto fn = [&contexts, &stop_loading, &finished](auto &ctx) {
+			if (!stop_loading) {
+				spdlog::info("Loading file: {} ({}/{})...", ctx.path.filename().string(), ctx.index,
+							 contexts.size());
+				try {
+					ctx.values = loadCSV(ctx.path, stop_loading);
+				} catch (const std::exception &e) {
+					spdlog::error("{}", e.what());
+				}
+				++finished;
+			}
+		};
+
+		if (parallel_loading) {
+			std::for_each(std::execution::par, contexts.begin(), contexts.end(), fn);
+		} else {
+			std::for_each(std::execution::seq, contexts.begin(), contexts.end(), fn);
+		}
 
 		if (stop_loading) {
 			return {};
@@ -202,6 +208,32 @@ namespace {
 
 			values.push_back(dd);
 		}
+
+		std::for_each(
+			std::execution::par_unseq, values.begin(), values.end(),
+			[&max_loaded_data_points, max_data_points](auto &dd) {
+				const auto reduction_factor =
+					static_cast<size_t>(std::ceil(static_cast<double>(dd.timestamp.size()) / max_data_points));
+
+				if (reduction_factor > 1) {
+					std::vector<time_t> timestamp_lowres{};
+					timestamp_lowres.reserve(max_data_points);
+					std::vector<double> data_lowres{};
+					data_lowres.reserve(max_data_points);
+
+					for (size_t i = 0; i < dd.data.size(); i += reduction_factor) {
+						timestamp_lowres.push_back(dd.timestamp[i]);
+						data_lowres.push_back(dd.data[i]);
+					}
+
+					dd.timestamp = std::move(timestamp_lowres);
+					dd.data = std::move(data_lowres);
+				}
+
+				if (dd.timestamp.size() > max_loaded_data_points) {
+					max_loaded_data_points.store(dd.timestamp.size());
+				}
+			});
 
 		return values;
 	}
@@ -323,6 +355,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 	std::set_terminate(terminateHandler);
 
 	std::vector<std::filesystem::path> paths{};
+	int max_data_points = 1'000'000;
 	
 	{
 		cxxopts::Options options(argv[0], "Spreadsheet Analyzer");
@@ -355,14 +388,19 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 	size_t required_files{0};
 	std::atomic<size_t> finished_files{0};
+	std::atomic<size_t> max_loaded_data_points{0};
+	size_t max_loaded_data_points_current{0};
 	std::atomic<bool> stop_loading{false};
+	bool parallel_loading = false;
 
 	auto paths_expanded = preparePaths(paths);
 	required_files = paths_expanded.size();
 
-	std::future<std::vector<data_dict_t>> data_dict_f =
-		std::async(std::launch::async, [paths_expanded, &finished_files, &stop_loading] {
-			return loadCSVs(paths_expanded, finished_files, stop_loading);
+	std::future<std::vector<data_dict_t>> data_dict_f = std::async(
+		std::launch::async,
+		[paths_expanded, &finished_files, &stop_loading, max_data_points, &max_loaded_data_points, parallel_loading] {
+			return loadCSVs(paths_expanded, finished_files, stop_loading, max_data_points, max_loaded_data_points,
+							parallel_loading);
 		});
 
 	if (!SDL_Init(SDL_INIT_VIDEO)) {
@@ -401,8 +439,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 											 static_cast<int>(font_fira_code_compressed_size), 15.0f);
 
 	// Setup Dear ImGui style
-	ImGui::StyleColorsDark();
-	// ImGui::StyleColorsClassic();
+	ImGui::StyleColorsClassic();
 
 	// Setup Platform/Renderer backends
 	ImGui_ImplSDL3_InitForOpenGL(window, gl_context);
@@ -417,16 +454,6 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 	bool done = false;
 	bool open_selected = false;
 	while (!done) {
-		// Poll and handle events (inputs, window resize, etc.)
-		// You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to
-		// tell if dear imgui wants to use your inputs.
-		// - When io.WantCaptureMouse is true, do not dispatch mouse input data
-		// to your main application, or clear/overwrite your copy of the mouse
-		// data.
-		// - When io.WantCaptureKeyboard is true, do not dispatch keyboard input
-		// data to your main application, or clear/overwrite your copy of the
-		// keyboard data. Generally you may always pass all inputs to dear
-		// imgui, and hide them from your application based on those two flags.
 		SDL_Event event;
 		while (SDL_PollEvent(&event)) {
 			ImGui_ImplSDL3_ProcessEvent(&event);
@@ -449,12 +476,10 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 			}
 		}
 
-		// Start the Dear ImGui frame
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplSDL3_NewFrame();
 		ImGui::NewFrame();
 		ImVec2 menu_size{};
-		// ImGui::GetStyle().WindowRounding = 0.0f;
 
 		if (ImGui::BeginMainMenuBar()) {
 			if (ImGui::BeginMenu("File")) {
@@ -462,6 +487,21 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 				if (ImGui::MenuItem("Exit", "Ctrl+Q", &done)) {}
 				ImGui::EndMenu();
 			}
+
+			if (ImGui::BeginMenu("Debug")) {
+				if (ImGui::MenuItem("Show plot window", nullptr, &show_plot_window)) {}
+				ImGui::Separator();
+				if (ImGui::MenuItem("Parallel loading", nullptr, &parallel_loading)) {}
+				const auto dp_str = fmt::format("Loaded data points: {}", max_loaded_data_points_current);
+				ImGui::Text("%s", dp_str.c_str());  // NOLINT(hicpp-vararg)
+				ImGui::InputInt("Max data points", &max_data_points);
+				ImGui::Separator();
+				const auto fps_str = fmt::format("{:.3f} ms/frame ({:.1f} FPS)", 1000.0f / ImGui::GetIO().Framerate,
+												 ImGui::GetIO().Framerate);
+				ImGui::Text("%s", fps_str.c_str());  // NOLINT(hicpp-vararg)
+				ImGui::EndMenu();
+			}
+
 			menu_size = ImGui::GetWindowSize();
 			ImGui::EndMainMenuBar();
 		}
@@ -479,10 +519,14 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 				paths_expanded = preparePaths(paths);
 				required_files = paths_expanded.size();
 				stop_loading.store(false);
-				
-				data_dict_f = std::async(std::launch::async, [paths_expanded, &finished_files, &stop_loading] {
-					return loadCSVs(paths_expanded, finished_files, stop_loading);
-				});
+				max_loaded_data_points.store(0);
+
+				data_dict_f =
+					std::async(std::launch::async, [paths_expanded, &finished_files, &stop_loading, max_data_points,
+													&max_loaded_data_points, parallel_loading] {
+						return loadCSVs(paths_expanded, finished_files, stop_loading, max_data_points,
+										max_loaded_data_points, parallel_loading);
+					});
 			}
 
 			open_selected = false;
@@ -542,18 +586,17 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 			}
 
 			if (data_dict_f.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
-				data_dict = data_dict_f.get();
+				const auto temp_data_dict = data_dict_f.get();
+
+				if (!temp_data_dict.empty()) {
+					data_dict = std::move(temp_data_dict);
+					max_loaded_data_points_current = max_loaded_data_points.load();
+				}
+
 				has_data = true;
 				show_plot_window = true;
 			}
 		}
-
-		ImGui::SetNextWindowPos(ImVec2(5, io.DisplaySize.y - 50), ImGuiCond_FirstUseEver);
-		ImGui::Begin("Debug", nullptr, ImGuiWindowFlags_NoResize);
-		const auto debug_str = fmt::format("Application average {:.3f} ms/frame ({:.1f} FPS)",
-											1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
-		ImGui::Text("%s", debug_str.c_str());  // NOLINT(hicpp-vararg)
-		ImGui::End();
 
 		// Rendering
 		ImGui::Render();
