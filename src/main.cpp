@@ -562,8 +562,8 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 		}
 
 		if (SDL_GetWindowFlags(window) & SDL_WINDOW_MINIMIZED) {
-            SDL_Delay(10);
-            continue;
+			SDL_Delay(10);
+			continue;
 		}
 
 		ImGui_ImplOpenGL3_NewFrame();
