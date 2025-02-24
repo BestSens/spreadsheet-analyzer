@@ -491,6 +491,9 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 	auto* window_icon = IMG_LoadPNG_IO(SDL_IOFromMem(const_cast<unsigned char*>(icon_data), icon_data_size));
 	SDL_SetWindowIcon(window, window_icon);
 
+	auto display_scale = SDL_GetWindowDisplayScale(window);
+	spdlog::debug("Display scale: {}x", display_scale);
+
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 	ImGuiIO &io = ImGui::GetIO();
@@ -498,6 +501,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 	io.IniFilename = nullptr;
 	io.Fonts->AddFontFromMemoryCompressedTTF(static_cast<const void *>(font_fira_code_compressed_data),
 											 static_cast<int>(font_fira_code_compressed_size), 15.0f);
+	io.FontGlobalScale = display_scale;
 
 	// Setup Dear ImGui style
 	try {
@@ -542,6 +546,12 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 				if (event.key.key == SDLK_Q && (event.key.mod & SDL_KMOD_CTRL) != 0) {
 					done = true;
 				}
+			}
+
+			if (event.type == SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED) {
+				display_scale = SDL_GetWindowDisplayScale(window);
+				io.FontGlobalScale = display_scale;
+				spdlog::debug("Display scale changed to {}x", display_scale);
 			}
 		}
 
