@@ -293,6 +293,29 @@ namespace {
 
 		std::exit(EXIT_FAILURE);  // NOLINT(concurrency-mt-unsafe)
 	}
+
+	auto preparePaths(std::vector<std::filesystem::path> paths) -> std::vector<std::filesystem::path> {
+		std::vector<std::filesystem::path> files{};
+		files.reserve(paths.size());
+
+		std::sort(paths.begin(), paths.end(), [](const auto& a, const auto& b) {
+			return a.filename() < b.filename();
+		});
+
+		for (auto& path : paths) {
+			if (std::filesystem::is_directory(path)) {
+				for (const auto& entry : std::filesystem::directory_iterator(path)) {
+					if (entry.path().extension() == ".csv") {
+						files.push_back(entry.path());
+					}
+				}
+			} else {
+				files.push_back(path);
+			}
+		}
+
+		return files;
+	}
 }  // namespace
 
 // #pragma comment(linker, "/SUBSYSTEM:windows /ENTRY:mainCRTStartup")
@@ -330,39 +353,17 @@ auto main(int argc, char ** argv) -> int {
 
 	}
 
-	if (paths.empty()) {
-		paths = selectFilesFromDialog();
-	}
-
-	if (paths.empty()) {
-		spdlog::error("No files selected.");
-		return EXIT_FAILURE;
-	}
-
-	std::sort(paths.begin(), paths.end(), [](const auto& a, const auto& b) {
-		return a.filename() < b.filename();
-	});
-
-	std::vector<std::filesystem::path> new_paths{};
-
-	for (auto& path : paths) {
-		if (std::filesystem::is_directory(path)) {
-			for (const auto& entry : std::filesystem::directory_iterator(path)) {
-				if (entry.path().extension() == ".csv") {
-					new_paths.push_back(entry.path());
-				}
-			}
-		} else {
-			new_paths.push_back(path);
-		}
-	}
-
-	std::atomic<size_t> finished{0};
+	size_t required_files{0};
+	std::atomic<size_t> finished_files{0};
 	std::atomic<bool> stop_loading{false};
 
+	auto paths_expanded = preparePaths(paths);
+	required_files = paths_expanded.size();
+
 	std::future<std::vector<data_dict_t>> data_dict_f =
-		std::async(std::launch::async,
-				   [new_paths, &finished, &stop_loading] { return loadCSVs(new_paths, finished, stop_loading); });
+		std::async(std::launch::async, [paths_expanded, &finished_files, &stop_loading] {
+			return loadCSVs(paths_expanded, finished_files, stop_loading);
+		});
 
 	if (!SDL_Init(SDL_INIT_VIDEO)) {
 		spdlog::error("Error: {}", SDL_GetError());
@@ -388,6 +389,7 @@ auto main(int argc, char ** argv) -> int {
 	SDL_GL_MakeCurrent(window, gl_context);
 	SDL_GL_SetSwapInterval(1);	// Enable vsync
 
+	// NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
 	auto* window_icon = IMG_LoadPNG_IO(SDL_IOFromMem(const_cast<unsigned char*>(icon_data), icon_data_size));
 	SDL_SetWindowIcon(window, window_icon);
 
@@ -406,13 +408,14 @@ auto main(int argc, char ** argv) -> int {
 	ImGui_ImplSDL3_InitForOpenGL(window, gl_context);
 	ImGui_ImplOpenGL3_Init(glsl_version);
 
-	bool show_plot_window = false;
+	bool show_plot_window = true;
 	bool has_data = false;
 	std::vector<data_dict_t> data_dict{};
 	const auto clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
 	// Main loop
 	bool done = false;
+	bool open_selected = false;
 	while (!done) {
 		// Poll and handle events (inputs, window resize, etc.)
 		// You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to
@@ -428,20 +431,20 @@ auto main(int argc, char ** argv) -> int {
 		while (SDL_PollEvent(&event)) {
 			ImGui_ImplSDL3_ProcessEvent(&event);
 			if (event.type == SDL_EVENT_QUIT) {
-				stop_loading.store(true);
-			}
-			if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && event.window.windowID == SDL_GetWindowID(window)) {
-				stop_loading.store(true);
-			}
-		}
-
-		if (stop_loading) {
-			if (has_data || data_dict_f.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
 				done = true;
-			} else {
-				ImGui::OpenPopup("Waiting for exit...");
-				if (ImGui::BeginPopupModal("Waiting for exit...")) {
-					ImGui::EndPopup();
+			}
+
+			if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && event.window.windowID == SDL_GetWindowID(window)) {
+				done = true;
+			}
+
+			if (event.type == SDL_EVENT_KEY_DOWN) {
+				if (event.key.key == SDLK_O && event.key.mod & SDL_KMOD_CTRL) {
+					open_selected = true;
+				}
+
+				if (event.key.key == SDLK_Q && event.key.mod & SDL_KMOD_CTRL) {
+					done = true;
 				}
 			}
 		}
@@ -450,53 +453,95 @@ auto main(int argc, char ** argv) -> int {
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplSDL3_NewFrame();
 		ImGui::NewFrame();
-		ImGui::GetStyle().WindowRounding = 0.0f;
+		ImVec2 menu_size{};
+		// ImGui::GetStyle().WindowRounding = 0.0f;
 
-		if (!has_data) {
-			if (data_dict_f.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
-				data_dict = data_dict_f.get();
-				has_data = true;
+		if (ImGui::BeginMainMenuBar()) {
+			if (ImGui::BeginMenu("File")) {
+				if (ImGui::MenuItem("Open", "Ctrl+O", &open_selected)) {}
+				if (ImGui::MenuItem("Exit", "Ctrl+Q", &done)) {}
+				ImGui::EndMenu();
 			}
+			menu_size = ImGui::GetWindowSize();
+			ImGui::EndMainMenuBar();
+		}
+
+		if (done) {
+			stop_loading.store(true);
+		}
+
+		if (open_selected) {
+			data_dict.clear();
+			has_data = false;
+			finished_files.store(0);
+
+			paths = selectFilesFromDialog();
+
+			paths_expanded = preparePaths(paths);
+			required_files = paths_expanded.size();
+			stop_loading.store(false);
+			data_dict_f = std::async(std::launch::async, [paths_expanded, &finished_files, &stop_loading] {
+				return loadCSVs(paths_expanded, finished_files, stop_loading);
+			});
+
+			open_selected = false;
 		}
 
 		if (has_data) {
-			ImPlot::CreateContext();
-			ImPlot::GetStyle().UseLocalTime = false;
-			ImPlot::GetStyle().UseISO8601 = true;
-			ImPlot::GetStyle().Use24HourClock = true;
-
 			if (!data_dict.empty()) {
-				ImGui::SetNextWindowPos(ImVec2(0, 0));
-				ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, io.DisplaySize.y));
-				ImGui::Begin("File content", &show_plot_window,
-							 ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar);
+				ImPlot::CreateContext();
+				ImPlot::GetStyle().UseLocalTime = false;
+				ImPlot::GetStyle().UseISO8601 = true;
+				ImPlot::GetStyle().Use24HourClock = true;
 
-				if (ImGui::BeginTabBar("ImPlotDemoTabs", ImGuiTabBarFlags_Reorderable)) {
-					for (const auto &dct : data_dict) {
-						if (ImGui::BeginTabItem(dct.name.c_str())) {
-							plotColumn(dct);
-							ImGui::EndTabItem();
+				if (!data_dict.empty()) {
+					ImGui::SetNextWindowPos(ImVec2(5, menu_size.y + 5));
+					ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x - 10, io.DisplaySize.y - menu_size.y - 10),
+											 ImGuiCond_FirstUseEver);
+					ImGui::Begin("File content", &show_plot_window, ImGuiWindowFlags_NoCollapse);
+
+					if (ImGui::BeginTabBar("ImPlotDemoTabs", ImGuiTabBarFlags_Reorderable)) {
+						for (const auto &dct : data_dict) {
+							if (ImGui::BeginTabItem(dct.name.c_str())) {
+								plotColumn(dct);
+								ImGui::EndTabItem();
+							}
 						}
-					}
 
-					ImGui::EndTabBar();
+						ImGui::EndTabBar();
+					}
+					ImGui::End();
+				} else {
+					ImGui::OpenPopup("Error", ImGuiWindowFlags_NoResize);
+					if (ImGui::BeginPopupModal("Error")) {
+						ImGui::Text("No valid data found.");  // NOLINT(hicpp-vararg)
+						ImGui::EndPopup();
+					}
 				}
-				ImGui::End();
-			} else {
-				ImGui::OpenPopup("Error");
-				if (ImGui::BeginPopupModal("Error")) {
-					ImGui::Text("No valid data found.");
-					ImGui::EndPopup();
+
+				if (!show_plot_window) {
+					data_dict.clear();
 				}
 			}
 		} else {
-			ImGui::SetNextWindowSize(ImVec2(250.0f, 65.0f));
+			ImGui::SetNextWindowSize(ImVec2(250.0f, 90.0f));
 			ImGui::OpenPopup("Loading data...");
-			if (ImGui::BeginPopupModal("Loading data...")) {
-				const auto progress = static_cast<float>(finished.load()) / new_paths.size();
-				const auto label = fmt::format("{:.0f}% ({}/{})", progress * 100.0f, finished.load(), new_paths.size());
+			if (ImGui::BeginPopupModal("Loading data...", nullptr,
+									   ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar)) {
+				const auto progress = static_cast<float>(finished_files.load()) / static_cast<double>(required_files);
+				const auto label = fmt::format("{:.0f}% ({}/{})", progress * 100.0f, finished_files.load(),
+											   static_cast<double>(required_files));
 				ImGui::ProgressBar(progress, ImVec2(234.0f, 25.0f), label.c_str());
+				if (ImGui::Button("Cancel", ImVec2(234.0f, 25.0f))) {
+					stop_loading.store(true);
+				}
 				ImGui::EndPopup();
+			}
+
+			if (data_dict_f.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+				data_dict = data_dict_f.get();
+				has_data = true;
+				show_plot_window = true;
 			}
 		}
 
@@ -509,6 +554,8 @@ auto main(int argc, char ** argv) -> int {
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 		SDL_GL_SwapWindow(window);
 	}
+
+	spdlog::debug("Graceful shutdown");
 
 	// Cleanup
 	ImGui_ImplOpenGL3_Shutdown();
