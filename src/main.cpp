@@ -331,16 +331,23 @@ namespace {
 		}
 	}
 
-	auto selectFilesFromDialog() -> std::vector<std::filesystem::path> {
+	auto selectFilesFromDialog(bool select_folder) -> std::vector<std::filesystem::path> {
 		const NFD::Guard nfd_guard{};
 		NFD::UniquePathSet out_paths{};
 	
 		const auto filters = std::array<nfdfilteritem_t, 1>{
 			nfdfilteritem_t{"CSV", "csv"}
 		};
-	
-		const auto result = NFD::OpenDialogMultiple(out_paths, filters.data(), filters.size());
-	
+
+		const auto result = [&]() {
+			if (!select_folder) {
+				return NFD::OpenDialogMultiple(out_paths, filters.data(), filters.size());
+			} else {
+				const nfdu8char_t *default_path = nullptr;
+				return NFD::PickFolderMultiple(out_paths, default_path);
+			}
+		}();
+
 		if (result == NFD_OKAY) {
 			nfdpathsetsize_t num_paths{};
 			NFD::PathSet::Count(out_paths, num_paths);
@@ -530,8 +537,9 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 	const auto clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
 	// Main loop
-	bool done = false;
-	bool open_selected = false;
+	bool done{false};
+	bool open_selected{false};
+	bool select_folder{false};
 	while (!done) {
 		SDL_Event event;
 		while (SDL_PollEvent(&event)) {
@@ -547,6 +555,8 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 			if (event.type == SDL_EVENT_KEY_DOWN) {
 				if (event.key.key == SDLK_O && (event.key.mod & SDL_KMOD_CTRL) != 0) {
 					open_selected = true;
+					select_folder = (event.key.mod & SDL_KMOD_SHIFT) != 0;
+				}
 
 				if (event.key.key == SDLK_W && (event.key.mod & SDL_KMOD_CTRL) != 0) {
 					data_dict.clear();
@@ -564,7 +574,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 			}
 		}
 
-		if (SDL_GetWindowFlags(window) & SDL_WINDOW_MINIMIZED) {
+		if ((SDL_GetWindowFlags(window) & SDL_WINDOW_MINIMIZED) != 0) {
 			SDL_Delay(10);
 			continue;
 		}
@@ -577,6 +587,9 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 		if (ImGui::BeginMainMenuBar()) {
 			if (ImGui::BeginMenu("File")) {
 				if (ImGui::MenuItem("Open", "Ctrl+O", &open_selected)) {}
+				if (ImGui::MenuItem("Open Folder", "Ctrl+Shift+O", &open_selected)) {
+					select_folder = true;
+				}
 				if (ImGui::MenuItem("Close", "Ctrl+W")) {
 					data_dict.clear();
 				}
@@ -612,7 +625,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 		}
 
 		if (open_selected) {
-			paths = selectFilesFromDialog();
+			paths = selectFilesFromDialog(select_folder);
 
 			if (!paths.empty()) {
 				finished_files.store(0);
@@ -632,6 +645,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 			}
 
 			open_selected = false;
+			select_folder = false;
 		}
 
 		if (!data_dict.empty()) {
