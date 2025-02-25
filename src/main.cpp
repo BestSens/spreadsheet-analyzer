@@ -484,7 +484,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 	spdlog::debug("SDL Initialized");
 	const auto window_flags = static_cast<SDL_WindowFlags>(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE |
 														   SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_MAXIMIZED);
-	auto *window = SDL_CreateWindow("Spreadsheet Analyzer 2.0", 1280, 720, window_flags);
+	auto *window = SDL_CreateWindow("Spreadsheet Analyzer", 1280, 720, window_flags);
 	auto *renderer = SDL_CreateRenderer(window, nullptr);
 	SDL_SetRenderVSync(renderer, 1);
 
