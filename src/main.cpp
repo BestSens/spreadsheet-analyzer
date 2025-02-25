@@ -139,8 +139,7 @@ namespace {
 	}
 
 	auto loadCSVs(const std::vector<std::filesystem::path> &paths, std::atomic<size_t> &finished,
-				  std::atomic<bool> &stop_loading, int max_data_points, std::atomic<size_t> &max_loaded_data_points,
-				  bool parallel_loading) -> std::vector<data_dict_t> {
+				  std::atomic<bool> &stop_loading, bool parallel_loading) -> std::vector<data_dict_t> {
 		if (paths.empty()) {
 			return {};
 		}
@@ -218,41 +217,22 @@ namespace {
 			values.push_back(dd);
 		}
 
-		std::for_each(
-			std::execution::par_unseq, values.begin(), values.end(),
-			[&max_loaded_data_points, max_data_points](auto &dd) {
-				const auto reduction_factor =
-					static_cast<size_t>(std::ceil(static_cast<double>(dd.timestamp.size()) / max_data_points));
-
-				if (reduction_factor > 1) {
-					std::vector<time_t> timestamp_lowres{};
-					timestamp_lowres.reserve(max_data_points);
-					std::vector<double> data_lowres{};
-					data_lowres.reserve(max_data_points);
-
-					for (size_t i = 0; i < dd.data.size(); i += reduction_factor) {
-						timestamp_lowres.push_back(dd.timestamp[i]);
-						data_lowres.push_back(dd.data[i]);
-					}
-
-					dd.timestamp = std::move(timestamp_lowres);
-					dd.data = std::move(data_lowres);
-				}
-
-				if (dd.timestamp.size() > max_loaded_data_points) {
-					max_loaded_data_points.store(dd.timestamp.size());
-				}
-			});
-
 		return values;
 	}
 
+	struct plot_data_t {
+		const data_dict_t *data;
+		size_t reduction_factor;
+	};
+
 	auto plotDict(int i, void *data) -> ImPlotPoint {
-		const auto &dd = *static_cast<data_dict_t *>(data);
-		return ImPlotPoint(static_cast<double>(dd.timestamp[i]), dd.data[i]);
+		const auto &plot_data = *static_cast<plot_data_t *>(data);
+		const auto &dd = *plot_data.data;
+		const auto index = i * plot_data.reduction_factor;
+		return ImPlotPoint(static_cast<double>(dd.timestamp[index]), dd.data[index]);
 	}
 
-	auto plotDataInSubplots(const std::vector<data_dict_t> &data) -> void {
+	auto plotDataInSubplots(const std::vector<data_dict_t> &data, size_t max_data_points) -> void {
 		ImVec2 v_min = ImGui::GetWindowContentRegionMin();
 		ImVec2 v_max = ImGui::GetWindowContentRegionMax();
 
@@ -324,9 +304,19 @@ namespace {
 					ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Time);
 					ImPlot::SetupAxisFormat(ImAxis_Y1, fmt.c_str());
 
-					// NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
-					auto *data = const_cast<void *>(static_cast<const void *>(&col));
-					ImPlot::PlotLineG(col.name.c_str(), plotDict, data, col.timestamp.size());
+					const auto data_points = col.timestamp.size();
+					const auto reduction_factor = [&data_points, &max_data_points]() -> size_t {
+						if (data_points > max_data_points && max_data_points > 0) {
+							return 1 + ((data_points - 1) / max_data_points);
+						} else {
+							return 1;
+						}
+					}();
+
+					plot_data_t plot_data{.data = &col, .reduction_factor = reduction_factor};
+					int count = col.timestamp.size() / reduction_factor;
+
+					ImPlot::PlotLineG(col.name.c_str(), plotDict, &plot_data, count);
 					ImPlot::EndPlot();
 				}
 			}
@@ -419,7 +409,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 	std::set_terminate(terminateHandler);
 
 	std::vector<std::filesystem::path> paths{};
-	int max_data_points = 1'000'000;
+	int max_data_points = 100'000;
 	bool show_console{false};
 	
 	{
@@ -464,8 +454,6 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 	size_t required_files{0};
 	std::atomic<size_t> finished_files{0};
-	std::atomic<size_t> max_loaded_data_points{0};
-	size_t max_loaded_data_points_current{0};
 	std::atomic<bool> stop_loading{false};
 	bool parallel_loading = false;
 	std::chrono::time_point<std::chrono::steady_clock> loading_start_time{};
@@ -475,11 +463,9 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 	required_files = paths_expanded.size();
 
 	loading_start_time = std::chrono::steady_clock::now();
-	std::future<std::vector<data_dict_t>> data_dict_f = std::async(
-		std::launch::async,
-		[paths_expanded, &finished_files, &stop_loading, max_data_points, &max_loaded_data_points, parallel_loading] {
-			return loadCSVs(paths_expanded, finished_files, stop_loading, max_data_points, max_loaded_data_points,
-							parallel_loading);
+	std::future<std::vector<data_dict_t>> data_dict_f =
+		std::async(std::launch::async, [paths_expanded, &finished_files, &stop_loading, parallel_loading] {
+			return loadCSVs(paths_expanded, finished_files, stop_loading, parallel_loading);
 		});
 
 	if (!SDL_Init(SDL_INIT_VIDEO)) {
@@ -621,8 +607,6 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 				if (ImGui::MenuItem("Show plot window", nullptr, &show_plot_window)) {}
 				ImGui::Separator();
 				if (ImGui::MenuItem("Parallel loading", nullptr, &parallel_loading)) {}
-				const auto dp_str = fmt::format("Loaded data points: {}", max_loaded_data_points_current);
-				ImGui::Text("%s", dp_str.c_str());	// NOLINT(hicpp-vararg)
 				ImGui::InputInt("Max data points", &max_data_points);
 				ImGui::Separator();
 				const auto fps_str = fmt::format("{:.3f} ms/frame ({:.1f} FPS)", 1000.0f / ImGui::GetIO().Framerate,
@@ -652,14 +636,11 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 				paths_expanded = preparePaths(paths);
 				required_files = paths_expanded.size();
 				stop_loading.store(false);
-				max_loaded_data_points.store(0);
 				loading_start_time = std::chrono::steady_clock::now();
 
 				data_dict_f =
-					std::async(std::launch::async, [paths_expanded, &finished_files, &stop_loading, max_data_points,
-													&max_loaded_data_points, parallel_loading] {
-						return loadCSVs(paths_expanded, finished_files, stop_loading, max_data_points,
-										max_loaded_data_points, parallel_loading);
+					std::async(std::launch::async, [paths_expanded, &finished_files, &stop_loading, parallel_loading] {
+						return loadCSVs(paths_expanded, finished_files, stop_loading, parallel_loading);
 					});
 			}
 
@@ -697,7 +678,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 				ImGui::BeginChild("File content", ImVec2(window_size.x - 255, window_size.y - 20));
 				ImGui::PushFont(io.Fonts->Fonts[1]);
-				plotDataInSubplots(data_dict);
+				plotDataInSubplots(data_dict, max_data_points);
 				ImGui::PopFont();
 				ImGui::EndChild();
 			} else {
@@ -736,7 +717,6 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 				if (!temp_data_dict.empty()) {
 					data_dict = std::move(temp_data_dict);
 					data_dict.at(0).visible = true;
-					max_loaded_data_points_current = max_loaded_data_points.load();
 				}
 
 				show_plot_window = true;
