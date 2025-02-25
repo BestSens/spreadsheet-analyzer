@@ -508,7 +508,6 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 		auto *logo = IMG_LoadPNG_IO(SDL_IOFromMem(const_cast<unsigned char *>(logo_data), logo_data_size));
 
 		if (logo != nullptr) {
-			spdlog::info("logo created");
 			logo_texture = SDL_CreateTextureFromSurface(renderer, logo);
 			
 			if (logo_texture == nullptr) {
@@ -554,7 +553,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 	bool show_plot_window = true;
 	std::vector<data_dict_t> data_dict{};
-	const auto clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+	const auto background_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
 	// Main loop
 	bool done{false};
@@ -746,8 +745,9 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 		}
 
 		ImGui::Render();
-        SDL_SetRenderDrawColorFloat(renderer, clear_color.x, clear_color.y, clear_color.z, clear_color.w);
-        SDL_RenderClear(renderer);
+		SDL_SetRenderDrawColorFloat(renderer, background_color.x, background_color.y, background_color.z,
+									background_color.w);
+		SDL_RenderClear(renderer);
 
 		const SDL_FRect texture_rect{
 			.x = io.DisplaySize.x - logo_size.x - 30.0f,
@@ -756,7 +756,9 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 			.h = logo_size.y
 		};
 
-		SDL_RenderTexture(renderer, logo_texture, nullptr, &texture_rect); 
+		if (logo_texture != nullptr) {
+			SDL_RenderTexture(renderer, logo_texture, nullptr, &texture_rect); 
+		}
 
         ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), renderer);
         SDL_RenderPresent(renderer);

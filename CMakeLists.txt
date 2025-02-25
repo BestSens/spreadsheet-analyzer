@@ -31,10 +31,6 @@ if(WIN32)
 		assets/manifest.manifest
 		assets/app.rc
 	)
-
-	target_compile_definitions(spreadsheet_analyzer PUBLIC
-		-DWIN32
-	)
 endif()
 
 target_include_directories(spreadsheet_analyzer PRIVATE

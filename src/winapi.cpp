@@ -1,6 +1,6 @@
 #include "winapi.hpp"
 
-#ifdef WIN32
+#ifdef _WIN32
 #include <windows.h>
 #endif
 
@@ -9,7 +9,7 @@
 #include <vector>
 
 auto isLightTheme() -> bool {
-#ifdef WIN32
+#ifdef _WIN32
 	// based on
 	// https://stackoverflow.com/questions/51334674/how-to-detect-windows-10-light-dark-mode-in-win32-application
 
@@ -35,7 +35,7 @@ auto isLightTheme() -> bool {
 }
 
 auto hideConsole() -> void {
-#ifdef WIN32
+#ifdef _WIN32
 	auto *console = GetConsoleWindow();
 	DWORD process_id{};
 	GetWindowThreadProcessId(console, &process_id);
