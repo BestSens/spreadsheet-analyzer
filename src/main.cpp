@@ -19,8 +19,8 @@
 #include "SDL3/SDL_opengl.h"
 #pragma clang diagnostic pop
 #include "SDL3_image/SDL_image.h"
-#include "backends/imgui_impl_opengl3.h"
 #include "backends/imgui_impl_sdl3.h"
+#include "backends/imgui_impl_sdlrenderer3.h"
 #include "csv.hpp"
 #include "cxxopts.hpp"
 #include "imgui.h"
@@ -37,6 +37,9 @@ extern "C" const unsigned char font_roboto_sans_compressed_data[];
 
 extern "C" const unsigned char icon_data[];
 extern "C" const size_t icon_data_size;
+
+extern "C" const unsigned char logo_data[];
+extern "C" const size_t logo_data_size;
 
 namespace {
 	struct data_dict_t {
@@ -479,27 +482,38 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 	}
 
 	spdlog::debug("SDL Initialized");
-
-	const char *glsl_version = "#version 130";
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, 0);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
-
-	// Create window with graphics context
-	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 16);
-	SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
 	const auto window_flags = static_cast<SDL_WindowFlags>(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE |
 														   SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_MAXIMIZED);
-	SDL_Window *window = SDL_CreateWindow("Spreadsheet Analyzer 2.0", 1280, 720, window_flags);
-	SDL_GLContext gl_context = SDL_GL_CreateContext(window);
-	SDL_GL_MakeCurrent(window, gl_context);
-	SDL_GL_SetSwapInterval(1);	// Enable vsync
+	auto *window = SDL_CreateWindow("Spreadsheet Analyzer 2.0", 1280, 720, window_flags);
+	auto *renderer = SDL_CreateRenderer(window, nullptr);
+	SDL_SetRenderVSync(renderer, 1);
 
 	// NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
 	auto* window_icon = IMG_LoadPNG_IO(SDL_IOFromMem(const_cast<unsigned char*>(icon_data), icon_data_size));
 	SDL_SetWindowIcon(window, window_icon);
+
+	SDL_ShowWindow(window);
+
+	SDL_Texture *logo_texture{};
+	ImVec2 logo_size{};
+	const float logo_scale = 0.4f;
+	{
+		// NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
+		auto *logo = IMG_LoadPNG_IO(SDL_IOFromMem(const_cast<unsigned char *>(logo_data), logo_data_size));
+
+		if (logo != nullptr) {
+			spdlog::info("logo created");
+			logo_texture = SDL_CreateTextureFromSurface(renderer, logo);
+			
+			if (logo_texture == nullptr) {
+				spdlog::error("Error: {}", SDL_GetError());
+			}
+
+			logo_size = {static_cast<float>(logo->w) * logo_scale, static_cast<float>(logo->h) * logo_scale};
+
+			SDL_DestroySurface(logo);
+		}
+	}
 
 	auto display_scale = SDL_GetWindowDisplayScale(window);
 	spdlog::debug("Display scale: {}x", display_scale);
@@ -529,8 +543,8 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 	}
 
 	// Setup Platform/Renderer backends
-	ImGui_ImplSDL3_InitForOpenGL(window, gl_context);
-	ImGui_ImplOpenGL3_Init(glsl_version);
+	ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
+    ImGui_ImplSDLRenderer3_Init(renderer);
 
 	bool show_plot_window = true;
 	std::vector<data_dict_t> data_dict{};
@@ -579,7 +593,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 			continue;
 		}
 
-		ImGui_ImplOpenGL3_NewFrame();
+		ImGui_ImplSDLRenderer3_NewFrame();
 		ImGui_ImplSDL3_NewFrame();
 		ImGui::NewFrame();
 		ImVec2 menu_size{};
@@ -725,23 +739,30 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 			}
 		}
 
-		// Rendering
 		ImGui::Render();
-		glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
-		glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w,
-					 clear_color.w);
-		glClear(GL_COLOR_BUFFER_BIT);
-		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-		SDL_GL_SwapWindow(window);
+        SDL_SetRenderDrawColorFloat(renderer, clear_color.x, clear_color.y, clear_color.z, clear_color.w);
+        SDL_RenderClear(renderer);
+
+		const SDL_FRect texture_rect{
+			.x = io.DisplaySize.x - logo_size.x - 30.0f,
+			.y = io.DisplaySize.y - logo_size.y - 30.0f,
+			.w = logo_size.x,
+			.h = logo_size.y
+		};
+
+		SDL_RenderTexture(renderer, logo_texture, nullptr, &texture_rect); 
+
+        ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), renderer);
+        SDL_RenderPresent(renderer);
 	}
 
 	// Cleanup
-	ImGui_ImplOpenGL3_Shutdown();
+	ImGui_ImplSDLRenderer3_Shutdown();
 	ImGui_ImplSDL3_Shutdown();
 	ImPlot::DestroyContext();
 	ImGui::DestroyContext();
 
-	SDL_GL_DestroyContext(gl_context);
+	SDL_DestroyRenderer(renderer);
 	SDL_DestroyWindow(window);
 	SDL_Quit();
 

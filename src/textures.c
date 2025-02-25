@@ -5,3 +5,9 @@ const unsigned char icon_data[] = {
 };
 
 const size_t icon_data_size = sizeof(icon_data);
+
+const unsigned char logo_data[] = {
+#embed "../assets/logo_4c.png"
+};
+
+const size_t logo_data_size = sizeof(logo_data);

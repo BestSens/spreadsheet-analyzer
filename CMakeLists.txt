@@ -23,7 +23,7 @@ endif()
 add_executable(spreadsheet_analyzer
 	src/main.cpp
 	src/winapi.cpp
-	src/window_icon.c
+	src/textures.c
 )
 
 if(WIN32)
