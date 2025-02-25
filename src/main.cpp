@@ -547,6 +547,9 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 			if (event.type == SDL_EVENT_KEY_DOWN) {
 				if (event.key.key == SDLK_O && (event.key.mod & SDL_KMOD_CTRL) != 0) {
 					open_selected = true;
+
+				if (event.key.key == SDLK_W && (event.key.mod & SDL_KMOD_CTRL) != 0) {
+					data_dict.clear();
 				}
 
 				if (event.key.key == SDLK_Q && (event.key.mod & SDL_KMOD_CTRL) != 0) {
@@ -574,6 +577,9 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 		if (ImGui::BeginMainMenuBar()) {
 			if (ImGui::BeginMenu("File")) {
 				if (ImGui::MenuItem("Open", "Ctrl+O", &open_selected)) {}
+				if (ImGui::MenuItem("Close", "Ctrl+W")) {
+					data_dict.clear();
+				}
 				ImGui::Separator();
 				if (ImGui::MenuItem("Exit", "Ctrl+Q", &done)) {}
 				ImGui::EndMenu();
