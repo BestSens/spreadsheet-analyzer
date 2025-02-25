@@ -59,8 +59,9 @@ namespace {
 	};
 
 	auto parseDate(const std::string &str) -> time_t {
+		static const auto locale = std::locale("de_DE.utf-8");
 		std::istringstream ss(str);
-		ss.imbue(std::locale("de_DE.utf-8"));
+		ss.imbue(locale);
 		
 		std::chrono::sys_seconds tp{};
 		ss >> std::chrono::parse("%Y/%m/%d %H:%M:%S", tp);
