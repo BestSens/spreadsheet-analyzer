@@ -414,12 +414,12 @@ namespace {
 	}
 }  // namespace
 
-#pragma comment(linker, "/SUBSYSTEM:windows /ENTRY:mainCRTStartup")
 auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognitive-complexity)
 	std::set_terminate(terminateHandler);
 
 	std::vector<std::filesystem::path> paths{};
 	int max_data_points = 1'000'000;
+	bool show_console{false};
 	
 	{
 		cxxopts::Options options(argv[0], "Spreadsheet Analyzer");
@@ -448,12 +448,17 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 			if (result.count("verbose") == 1u) {
 				spdlog::set_level(spdlog::level::debug);
 				spdlog::info("verbose output enabled");
+				show_console = true;
 			}
 		} catch (const std::exception& e) {
 			spdlog::critical(e.what());
 			return EXIT_FAILURE;
 		}
 
+	}
+
+	if (!show_console) {
+		hideConsole();
 	}
 
 	size_t required_files{0};

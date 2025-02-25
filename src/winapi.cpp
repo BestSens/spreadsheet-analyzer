@@ -33,3 +33,15 @@ auto isLightTheme() -> bool {
 	return false;
 #endif
 }
+
+auto hideConsole() -> void {
+#ifdef WIN32
+	auto *console = GetConsoleWindow();
+	DWORD process_id{};
+	GetWindowThreadProcessId(console, &process_id);
+	if (GetCurrentProcessId() == process_id) {
+		ShowWindow(console, SW_HIDE);
+		RedrawWindow(console, nullptr, nullptr, RDW_UPDATENOW);
+	}
+#endif
+}
