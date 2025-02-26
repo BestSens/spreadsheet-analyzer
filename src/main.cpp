@@ -387,6 +387,7 @@ namespace {
 		const data_dict_t *data;
 		size_t reduction_factor;
 		size_t start_index;
+		int count;
 	};
 
 	auto plotDict(int i, void *data) -> ImPlotPoint {
@@ -395,8 +396,17 @@ namespace {
 
 		const auto &plot_data = *static_cast<plot_data_t *>(data);
 		const auto &dd = *plot_data.data;
-		const auto index = plot_data.start_index + (static_cast<size_t>(i) * plot_data.reduction_factor);
-		return ImPlotPoint(static_cast<double>(dd.timestamp[index]), dd.data[index]);
+
+		if (i == 0) {
+			return {static_cast<double>(dd.timestamp.front()), std::numeric_limits<double>::quiet_NaN()};
+		} 
+
+		if (i == plot_data.count - 1) {
+			return {static_cast<double>(dd.timestamp.back()), std::numeric_limits<double>::quiet_NaN()};
+		}
+
+		const auto index = plot_data.start_index + (static_cast<size_t>(i-1) * plot_data.reduction_factor);
+		return {static_cast<double>(dd.timestamp[index]), dd.data[index]};
 	}
 
 	auto getDateRange(const data_dict_t& data) -> std::pair<time_t, time_t> {
@@ -501,10 +511,11 @@ namespace {
 					const auto points_in_range = stop_index - start_index;
 					const auto reduction_factor = std::clamp(fastCeil<size_t>(points_in_range, max_data_points), 1uz,
 															 std::numeric_limits<size_t>::max());
-					plot_data_t plot_data{
-						.data = &col, .reduction_factor = reduction_factor, .start_index = start_index};
 
-					const auto count = coerceCast<int>(fastCeil(points_in_range, reduction_factor));
+					const auto count = coerceCast<int>(fastCeil(points_in_range, reduction_factor)) + 2;
+					plot_data_t plot_data{
+						.data = &col, .reduction_factor = reduction_factor, .start_index = start_index, .count = count};
+
 					ImPlot::PlotLineG(col.name.c_str(), plotDict, &plot_data, count);
 					ImPlot::EndPlot();
 				}
