@@ -477,7 +477,8 @@ namespace {
 		}();
 
 		const auto subplot_id = "##" + uuid;
-		if (ImPlot::BeginSubplots(subplot_id.c_str(), rows, cols, ImVec2(plot_width, plot_height))) {
+		if (ImPlot::BeginSubplots(subplot_id.c_str(), rows, cols, ImVec2(plot_width, plot_height),
+								  ImPlotSubplotFlags_ShareItems)) {
 			for (const auto &col : data) {
 				if (!col.visible) {
 					continue;
