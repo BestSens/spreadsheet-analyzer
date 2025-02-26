@@ -13,15 +13,13 @@
 #include <unordered_map>
 #include <vector>
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wlanguage-extension-token"
 #include "SDL3/SDL_main.h"
 #include "SDL3/SDL_opengl.h"
-#pragma clang diagnostic pop
 #include "SDL3_image/SDL_image.h"
 #include "backends/imgui_impl_sdl3.h"
 #include "backends/imgui_impl_sdlrenderer3.h"
 #include "csv.hpp"
+#include "custom_type_traits.hpp"
 #include "cxxopts.hpp"
 #include "imgui.h"
 #include "imgui_stdlib.h"
@@ -226,13 +224,16 @@ namespace {
 	};
 
 	auto plotDict(int i, void *data) -> ImPlotPoint {
+		assert(i >= 0);
+		assert(data != nullptr);
+
 		const auto &plot_data = *static_cast<plot_data_t *>(data);
 		const auto &dd = *plot_data.data;
-		const auto index = i * plot_data.reduction_factor;
+		const auto index = static_cast<size_t>(i) * plot_data.reduction_factor;
 		return ImPlotPoint(static_cast<double>(dd.timestamp[index]), dd.data[index]);
 	}
 
-	auto plotDataInSubplots(const std::vector<data_dict_t> &data, size_t max_data_points) -> void {
+	auto plotDataInSubplots(const std::vector<data_dict_t> &data, int max_data_points) -> void {
 		ImVec2 v_min = ImGui::GetWindowContentRegionMin();
 		ImVec2 v_max = ImGui::GetWindowContentRegionMax();
 
@@ -272,7 +273,7 @@ namespace {
 		// 	}
 		// }
 
-		const auto [rows, cols] = [n_selected]() -> std::pair<size_t, size_t> {
+		const auto [rows, cols] = [n_selected]() -> std::pair<int, int> {
 			if (n_selected <= 3) {
 				return {n_selected, 1};
 			}
@@ -304,17 +305,17 @@ namespace {
 					ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Time);
 					ImPlot::SetupAxisFormat(ImAxis_Y1, fmt.c_str());
 
-					const auto data_points = col.timestamp.size();
+					const auto data_points = coerceCast<int>(col.timestamp.size());
 					const auto reduction_factor = [&data_points, &max_data_points]() -> size_t {
 						if (data_points > max_data_points && max_data_points > 0) {
-							return 1 + ((data_points - 1) / max_data_points);
+							return coerceCast<size_t>(1 + ((data_points - 1) / max_data_points));
 						} else {
 							return 1;
 						}
 					}();
 
 					plot_data_t plot_data{.data = &col, .reduction_factor = reduction_factor};
-					int count = col.timestamp.size() / reduction_factor;
+					const auto count = coerceCast<int>(col.timestamp.size() / reduction_factor);
 
 					ImPlot::PlotLineG(col.name.c_str(), plotDict, &plot_data, count);
 					ImPlot::EndPlot();
@@ -701,7 +702,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 			ImGui::OpenPopup("Loading data...");
 			if (ImGui::BeginPopupModal("Loading data...", nullptr,
 									   ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar)) {
-				const auto progress = static_cast<float>(finished_files.load()) / static_cast<double>(required_files);
+				const auto progress = static_cast<float>(finished_files.load()) / static_cast<float>(required_files);
 				const auto label = fmt::format("{:.0f}% ({}/{})", progress * 100.0f, finished_files.load(),
 											   static_cast<double>(required_files));
 				ImGui::ProgressBar(progress, ImVec2(234.0f, 25.0f), label.c_str());

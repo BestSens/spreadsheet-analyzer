@@ -9,3 +9,5 @@ CPMAddPackage(
 )
 
 FetchContent_MakeAvailable(sdl_image)
+
+set_target_properties(SDL3_image-static PROPERTIES INTERFACE_SYSTEM_INCLUDE_DIRECTORIES $<TARGET_PROPERTY:SDL3_image-static,INTERFACE_INCLUDE_DIRECTORIES>)

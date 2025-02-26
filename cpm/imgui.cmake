@@ -26,3 +26,5 @@ target_link_libraries(imgui PUBLIC SDL3::SDL3)
 add_executable(binary_to_compressed
 	${imgui_external_SOURCE_DIR}/misc/fonts/binary_to_compressed_c.cpp
 )
+
+set_target_properties(imgui PROPERTIES INTERFACE_SYSTEM_INCLUDE_DIRECTORIES $<TARGET_PROPERTY:imgui,INTERFACE_INCLUDE_DIRECTORIES>)

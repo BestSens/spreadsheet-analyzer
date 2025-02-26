@@ -8,3 +8,4 @@ CPMAddPackage(
 )
 
 find_package(csv-parser)
+set_target_properties(csv PROPERTIES INTERFACE_SYSTEM_INCLUDE_DIRECTORIES $<TARGET_PROPERTY:csv,INTERFACE_INCLUDE_DIRECTORIES>)
