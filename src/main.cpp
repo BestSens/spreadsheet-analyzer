@@ -730,6 +730,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 	// Main loop
 	bool done{false};
 	bool is_ctrl_pressed{false};
+	bool is_shift_pressed{false};
 	
 	while (!done) {
 		SDL_Event event;
@@ -759,11 +760,19 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 				if ((event.key.mod & SDL_KMOD_CTRL) != 0) {
 					is_ctrl_pressed = true;
 				}
+
+				if ((event.key.mod & SDL_KMOD_SHIFT) != 0) {
+					is_shift_pressed = true;
+				}
 			}
 
 			if (event.type == SDL_EVENT_KEY_UP) {
 				if ((event.key.mod & SDL_KMOD_CTRL) == 0) {
 					is_ctrl_pressed = false;
+				}
+
+				if ((event.key.mod & SDL_KMOD_SHIFT) == 0) {
+					is_shift_pressed = false;
 				}
 			}
 
@@ -862,7 +871,28 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 						for (auto &dct : dict) {
 							if (ImGui::Selectable(dct.name.c_str(), &dct.visible)) {
 								if (is_ctrl_pressed) {
-									continue;
+									break;
+								}
+
+								if (is_shift_pressed) {
+									const auto first_visible =
+										std::find_if(dict.begin(), dict.end(), [](const auto &tmp) { return tmp.visible; });
+
+									const auto current_dict = std::find_if(
+										dict.begin(), dict.end(), [&dct](const auto &tmp) { return tmp.uuid == dct.uuid; });
+
+									if (first_visible != dict.end() && current_dict != dict.end()) {
+										const auto first_index = std::distance(dict.begin(), first_visible);
+										const auto current_index = std::distance(dict.begin(), current_dict);
+
+										const auto start = std::min(first_index, current_index);
+										const auto stop = std::max(first_index, current_index);
+
+										std::for_each(dict.begin() + start, dict.begin() + stop + 1,
+													 [](auto &tmp) { tmp.visible = true; });
+									}
+
+									break;
 								}
 
 								std::for_each(dict.begin(), dict.end(), [](auto &tmp) { tmp.visible = false; });
