@@ -473,7 +473,8 @@ namespace {
 					continue;
 				}
 
-				if (ImPlot::BeginPlot(col.uuid.c_str(), ImVec2(plot_width, plot_height),
+				const auto plot_title = col.name + "##" + col.uuid;
+				if (ImPlot::BeginPlot(plot_title.c_str(), ImVec2(plot_width, plot_height),
 									  ImPlotFlags_NoLegend | ImPlotFlags_NoTitle)) {
 					const auto fmt = [&col]() -> std::string {
 						if (col.unit.empty()) {
