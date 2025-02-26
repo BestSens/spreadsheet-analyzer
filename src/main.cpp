@@ -26,6 +26,7 @@
 #include "implot.h"
 #include "nfd.hpp"
 #include "spdlog/spdlog.h"
+#include "uuid.h"
 #include "winapi.hpp"
 
 extern "C" const unsigned int font_roboto_mono_compressed_size;
@@ -42,6 +43,7 @@ extern "C" const size_t logo_data_size;
 namespace {
 	struct data_dict_t {
 		std::string name;
+		std::string uuid;
 		std::string unit;
 		bool visible{false};
 	
@@ -54,6 +56,157 @@ namespace {
 		std::string unit;
 
 		std::vector<std::pair<time_t, double>> data{};
+	};
+
+	class UUIDGenerator {
+	public:
+		// Returns the singleton instance.
+		static auto getInstance() -> UUIDGenerator & {
+			static UUIDGenerator instance;
+			return instance;
+		}
+
+		// Delete copy constructor, move constructor, copy assignment and move assignment operators.
+		UUIDGenerator(const UUIDGenerator &) = delete;
+		UUIDGenerator(UUIDGenerator &&) = delete;
+		auto operator=(const UUIDGenerator &) -> UUIDGenerator& = delete;
+		auto operator=(UUIDGenerator &&) -> UUIDGenerator& = delete;
+
+		// Generates a new UUID.
+		auto generate() -> uuids::uuid {
+			return this->generator();
+		}
+
+	private:
+		// Private constructor initializes the generator.
+		UUIDGenerator() = default;
+		~UUIDGenerator() = default;
+
+		std::mt19937 rng{std::random_device{}()};
+		uuids::uuid_random_generator generator{rng};
+	};
+
+	class WindowContext {
+	public:
+		using function_signature = std::function<std::vector<data_dict_t>(
+			std::vector<std::filesystem::path>, std::atomic<size_t> &, std::atomic<bool> &, bool)>;
+
+		WindowContext() = default;
+		explicit WindowContext(std::vector<data_dict_t> new_data) : data{std::move(new_data)} {}
+
+		WindowContext(const std::vector<std::filesystem::path> &paths, function_signature loading_fn) {
+			spdlog::debug("Creating window context with UUID: {}", this->getUUID());
+			this->loadFiles(paths, loading_fn);
+		}
+
+		~WindowContext() {
+			spdlog::debug("Destroying window context with UUID: {}", this->getUUID());
+			if (this->data_dict_f.valid()) {
+				this->stop_loading.store(true);
+				this->data_dict_f.wait();
+			}
+			spdlog::debug("Window context with UUID: {} destroyed", this->getUUID());
+		}
+
+		WindowContext(const WindowContext&) = delete;
+		auto operator=(const WindowContext&) -> WindowContext& = delete;
+
+		WindowContext(WindowContext &&other) noexcept
+			: data(std::move(other.data)),
+			  window_open(other.window_open),
+			  scheduled_for_deletion(other.scheduled_for_deletion) {}
+
+		auto operator=(WindowContext &&other) noexcept -> WindowContext & {
+			if (this != &other) {
+				this->data = std::move(other.data);
+				this->window_open = other.window_open;
+				this->scheduled_for_deletion = other.scheduled_for_deletion;
+			}
+
+			return *this;
+		}
+
+		auto clear() -> void {
+			data.clear();
+		}
+
+		[[nodiscard]] auto getData() const -> const std::vector<data_dict_t> & {
+			return this->data;
+		}
+		
+		[[nodiscard]] auto getData() -> std::vector<data_dict_t> & {
+			return this->data;
+		}
+
+		auto setData(std::vector<data_dict_t> new_data) -> void {
+			this->data = std::move(new_data);
+		}
+
+		auto getWindowOpenRef() -> bool& {
+			return this->window_open;
+		}
+
+		[[nodiscard]] auto isScheduledForDeletion() const -> bool {
+			return this->scheduled_for_deletion;
+		}
+
+		auto scheduleForDeletion() -> void {
+			this->stop_loading.store(true);
+			this->scheduled_for_deletion = true;
+		}
+
+		auto loadFiles(const std::vector<std::filesystem::path> &paths, function_signature fn) -> void {
+			this->required_files = paths.size();
+			this->data_dict_f = std::async(std::launch::async, [this, fn, paths] {
+				return fn(paths, this->finished_files, this->stop_loading, false);
+			});
+		}
+
+		auto checkForFinishedLoading() -> void {
+			if (data_dict_f.valid() && data_dict_f.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+				const auto temp_data_dict = data_dict_f.get();
+
+				if (!temp_data_dict.empty()) {
+					this->data = temp_data_dict;
+					this->data.front().visible = true;
+				}
+			}
+		}
+
+		struct loading_status_t {
+			bool is_loading;
+			size_t finished_files;
+			size_t required_files;
+		};
+
+		auto getLoadingStatus() -> loading_status_t {
+			const auto is_loading = this->data_dict_f.valid() &&
+									this->data_dict_f.wait_for(std::chrono::seconds(0)) != std::future_status::ready;
+			return {
+				.is_loading = is_loading,
+				.finished_files = this->finished_files.load(),
+				.required_files = this->required_files
+			};
+		}
+
+		auto getWindowID() const -> std::string {
+			return "Data view##" + this->getUUID();
+		}
+
+		auto getUUID() const -> std::string {
+			return uuids::to_string(this->uuid);
+		}
+
+	private:
+		std::vector<data_dict_t> data{};
+		bool window_open{true};
+		bool scheduled_for_deletion{false};
+		std::future<std::vector<data_dict_t>> data_dict_f{};
+
+		std::atomic<bool> stop_loading{false};
+		std::atomic<size_t> finished_files{0};
+		size_t required_files{0};
+		uuids::uuid uuid{UUIDGenerator::getInstance().generate()};
 	};
 
 	auto parseDate(const std::string &str) -> time_t {
@@ -215,6 +368,7 @@ namespace {
 
 			data_dict_t dd{};
 			dd.name = value.name;
+			dd.uuid = uuids::to_string(UUIDGenerator::getInstance().generate());
 			dd.unit = value.unit;
 
 			for (const auto &[date, val] : value.data) {
@@ -243,7 +397,8 @@ namespace {
 		return ImPlotPoint(static_cast<double>(dd.timestamp[index]), dd.data[index]);
 	}
 
-	auto plotDataInSubplots(const std::vector<data_dict_t> &data, int max_data_points) -> void {
+	auto plotDataInSubplots(const std::vector<data_dict_t> &data, int max_data_points, const std::string &uuid)
+		-> void {
 		ImVec2 v_min = ImGui::GetWindowContentRegionMin();
 		ImVec2 v_max = ImGui::GetWindowContentRegionMax();
 
@@ -291,13 +446,14 @@ namespace {
 			return {(n_selected + 1) / 2, 2};
 		}();
 
-		if (ImPlot::BeginSubplots("", rows, cols, ImVec2(plot_width, plot_height))) {
+		const auto subplot_id = "##" + uuid;
+		if (ImPlot::BeginSubplots(subplot_id.c_str(), rows, cols, ImVec2(plot_width, plot_height))) {
 			for (const auto &col : data) {
 				if (!col.visible) {
 					continue;
 				}
 
-				if (ImPlot::BeginPlot(col.name.c_str(), ImVec2(plot_width, plot_height),
+				if (ImPlot::BeginPlot(col.uuid.c_str(), ImVec2(plot_width, plot_height),
 									  ImPlotFlags_NoLegend | ImPlotFlags_NoTitle)) {
 					const auto fmt = [&col]() -> std::string {
 						if (col.unit.empty()) {
@@ -427,7 +583,7 @@ namespace {
 auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognitive-complexity)
 	std::set_terminate(terminateHandler);
 
-	std::vector<std::filesystem::path> paths{};
+	std::vector<std::filesystem::path> commandline_paths{};
 	int max_data_points = 10'000;
 	bool show_console{false};
 	
@@ -451,7 +607,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 			if (result.count("filename") > 0u) {
 				for (const auto& file : result["filename"].as<std::vector<std::string>>()) {
-					paths.push_back(std::filesystem::path(file));
+					commandline_paths.push_back(std::filesystem::path(file));
 				}
 			}
 
@@ -471,21 +627,20 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 		hideConsole();
 	}
 
-	size_t required_files{0};
-	std::atomic<size_t> finished_files{0};
-	std::atomic<bool> stop_loading{false};
 	bool parallel_loading = false;
 	std::chrono::time_point<std::chrono::steady_clock> loading_start_time{};
 	std::chrono::time_point<std::chrono::steady_clock> loading_end_time{};
 
-	auto paths_expanded = preparePaths(paths);
-	required_files = paths_expanded.size();
+	std::list<WindowContext> window_contexts{};
 
-	loading_start_time = std::chrono::steady_clock::now();
-	std::future<std::vector<data_dict_t>> data_dict_f =
-		std::async(std::launch::async, [paths_expanded, &finished_files, &stop_loading, parallel_loading] {
-			return loadCSVs(paths_expanded, finished_files, stop_loading, parallel_loading);
-		});
+	{
+		const auto paths_expanded = preparePaths(commandline_paths);
+
+		loading_start_time = std::chrono::steady_clock::now();
+		if (!paths_expanded.empty()) {
+			window_contexts.emplace_back(paths_expanded, loadCSVs);
+		}
+	}
 
 	if (!SDL_Init(SDL_INIT_VIDEO)) {
 		spdlog::error("Error: {}", SDL_GetError());
@@ -556,8 +711,6 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 	ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
     ImGui_ImplSDLRenderer3_Init(renderer);
 
-	bool show_plot_window = true;
-	std::vector<data_dict_t> data_dict{};
 	const auto background_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
 	// Main loop
@@ -580,10 +733,6 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 				if (event.key.key == SDLK_O && (event.key.mod & SDL_KMOD_CTRL) != 0) {
 					open_selected = true;
 					select_folder = (event.key.mod & SDL_KMOD_SHIFT) != 0;
-				}
-
-				if (event.key.key == SDLK_W && (event.key.mod & SDL_KMOD_CTRL) != 0) {
-					data_dict.clear();
 				}
 
 				if (event.key.key == SDLK_Q && (event.key.mod & SDL_KMOD_CTRL) != 0) {
@@ -614,17 +763,12 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 				if (ImGui::MenuItem("Open Folder", "Ctrl+Shift+O", &open_selected)) {
 					select_folder = true;
 				}
-				if (ImGui::MenuItem("Close", "Ctrl+W")) {
-					data_dict.clear();
-				}
 				ImGui::Separator();
 				if (ImGui::MenuItem("Exit", "Ctrl+Q", &done)) {}
 				ImGui::EndMenu();
 			}
 
 			if (ImGui::BeginMenu("Debug")) {
-				if (ImGui::MenuItem("Show plot window", nullptr, &show_plot_window)) {}
-				ImGui::Separator();
 				if (ImGui::MenuItem("Parallel loading", nullptr, &parallel_loading)) {}
 				ImGui::InputInt("Max data points", &max_data_points);
 				ImGui::Separator();
@@ -642,106 +786,86 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 			ImGui::EndMainMenuBar();
 		}
 
-		if (done) {
-			stop_loading.store(true);
-		}
-
 		if (open_selected) {
-			paths = selectFilesFromDialog(select_folder);
+			const auto paths = selectFilesFromDialog(select_folder);
 
 			if (!paths.empty()) {
-				finished_files.store(0);
-
-				paths_expanded = preparePaths(paths);
-				required_files = paths_expanded.size();
-				stop_loading.store(false);
+				const auto paths_expanded = preparePaths(paths);
 				loading_start_time = std::chrono::steady_clock::now();
-
-				data_dict_f =
-					std::async(std::launch::async, [paths_expanded, &finished_files, &stop_loading, parallel_loading] {
-						return loadCSVs(paths_expanded, finished_files, stop_loading, parallel_loading);
-					});
+				window_contexts.emplace_back(paths_expanded, loadCSVs);
 			}
 
 			open_selected = false;
 			select_folder = false;
 		}
 
-		if (!data_dict.empty()) {
-			ImGui::SetNextWindowPos(ImVec2(0, menu_size.y));
-			ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, io.DisplaySize.y - menu_size.y));
-			ImGui::Begin("Data view", nullptr,
-							ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
-								ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar |
-								ImGuiWindowFlags_NoScrollWithMouse);
+		for (size_t i = 1; auto &ctx : window_contexts) {
+			ImGui::PushID(ctx.getUUID().c_str());
+			ctx.checkForFinishedLoading();
+			auto &dict = ctx.getData();
+			auto window_open = ctx.getWindowOpenRef();
+
+			ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x * 0.75f, (io.DisplaySize.y - menu_size.y) * 0.75f),
+									 ImGuiCond_Once);
+			ImGui::SetNextWindowPos(ImVec2(static_cast<float>(i) * 25.0f, static_cast<float>(i) * 25.0f + menu_size.y),
+									ImGuiCond_Once);
+			++i;
+
+			ImGui::Begin(ctx.getWindowID().c_str(), &window_open,
+						 ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
 			ImPlot::CreateContext();
 			ImPlot::GetStyle().UseLocalTime = false;
 			ImPlot::GetStyle().UseISO8601 = true;
 			ImPlot::GetStyle().Use24HourClock = true;
 
-			if (!data_dict.empty()) {
-				const auto window_size = ImGui::GetWindowSize();
+			const auto loading_status = ctx.getLoadingStatus();
 
-				ImGui::BeginChild("Column List", ImVec2(250, window_size.y - 20));
-				const auto col_list_size = ImGui::GetWindowSize();
-				if (ImGui::BeginListBox("Columns", ImVec2(col_list_size.x, col_list_size.y))) {
-					for (auto &dct : data_dict) {
-						if (ImGui::Selectable(dct.name.c_str(), &dct.visible)) {}
-					}
-					ImGui::EndListBox();
-				}
-				ImGui::EndChild();
-
-				ImGui::SameLine();
-
-				ImGui::BeginChild("File content", ImVec2(window_size.x - 255, window_size.y - 20));
-				ImGui::PushFont(io.Fonts->Fonts[1]);
-				plotDataInSubplots(data_dict, max_data_points);
-				ImGui::PopFont();
-				ImGui::EndChild();
+			if (loading_status.is_loading) {
+				const auto progress = static_cast<float>(loading_status.finished_files) /
+									  static_cast<float>(loading_status.required_files);
+				const auto label = fmt::format("{:.0f}% ({}/{})", progress * 100.0f, loading_status.finished_files,
+											   loading_status.required_files);
+				ImGui::ProgressBar(progress, ImVec2(ImGui::GetWindowSize().x - 20, 20), label.c_str());
 			} else {
-				ImGui::OpenPopup("Error", ImGuiWindowFlags_NoResize);
-				if (ImGui::BeginPopupModal("Error")) {
-					ImGui::Text("No valid data found.");  // NOLINT(hicpp-vararg)
-					ImGui::EndPopup();
-				}
-			}
+				if (!dict.empty()) {
+					const auto window_size = ImGui::GetWindowSize();
 
-			if (!show_plot_window) {
-				data_dict.clear();
+					ImGui::BeginChild("Column List", ImVec2(250, window_size.y - 20));
+					const auto col_list_size = ImGui::GetWindowSize();
+
+					if (ImGui::BeginListBox("List Box", ImVec2(col_list_size.x, col_list_size.y))) {
+						for (auto &dct : dict) {
+							if (ImGui::Selectable(dct.name.c_str(), &dct.visible)) {}
+						}
+						ImGui::EndListBox();
+					}
+					ImGui::EndChild();
+
+					ImGui::SameLine();
+
+					ImGui::BeginChild("File content", ImVec2(window_size.x - 255, window_size.y - 20));
+					ImGui::PushFont(io.Fonts->Fonts[1]);
+					plotDataInSubplots(dict, max_data_points, ctx.getUUID());
+					ImGui::PopFont();
+					ImGui::EndChild();
+				} else {
+					ImGui::Text("No valid data found.");  // NOLINT(hicpp-vararg)
+				}
 			}
 
 			ImGui::End();
-		}
 
-		if (data_dict_f.valid()) {
-			ImGui::SetNextWindowSize(ImVec2(250.0f, 90.0f));
-			ImGui::OpenPopup("Loading data...");
-			if (ImGui::BeginPopupModal("Loading data...", nullptr,
-									   ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar)) {
-				const auto progress = static_cast<float>(finished_files.load()) / static_cast<float>(required_files);
-				const auto label = fmt::format("{:.0f}% ({}/{})", progress * 100.0f, finished_files.load(),
-											   static_cast<double>(required_files));
-				ImGui::ProgressBar(progress, ImVec2(234.0f, 25.0f), label.c_str());
-				if (ImGui::Button("Cancel", ImVec2(234.0f, 25.0f))) {
-					stop_loading.store(true);
-				}
-				ImGui::EndPopup();
+			if (!window_open) {
+				ctx.scheduleForDeletion();
 			}
 
-			if (data_dict_f.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
-				const auto temp_data_dict = data_dict_f.get();
-
-				if (!temp_data_dict.empty()) {
-					data_dict = std::move(temp_data_dict);
-					data_dict.at(0).visible = true;
-				}
-
-				show_plot_window = true;
-				loading_end_time = std::chrono::steady_clock::now();
-			}
+			ImGui::PopID();
 		}
+
+		window_contexts.erase(std::remove_if(window_contexts.begin(), window_contexts.end(),
+											 [](const auto &ctx) { return ctx.isScheduledForDeletion(); }),
+							  window_contexts.end());
 
 		ImGui::Render();
 		SDL_SetRenderDrawColorFloat(renderer, background_color.x, background_color.y, background_color.z,

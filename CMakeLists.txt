@@ -92,6 +92,7 @@ include(csv-parser)
 include(add_cxxopts)
 include(nativefiledialog-extended)
 include(expected)
+include(uuid)
 include(roboto_sans)
 include(roboto_mono)
 
@@ -119,6 +120,7 @@ target_link_libraries(spreadsheet_analyzer PRIVATE
 	cxxopts
 	nfd
 	expected
+	stduuid
 	roboto_sans
 	roboto_mono
 )
