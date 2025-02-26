@@ -304,8 +304,16 @@ namespace {
 					ImPlot::SetupAxes("date", col.name.c_str());
 					ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Time);
 					ImPlot::SetupAxisFormat(ImAxis_Y1, fmt.c_str());
+					
+					const auto limits = ImPlot::GetPlotLimits(ImAxis_X1);
+					const auto range = limits.X.Max - limits.X.Min;
+					const auto max_range = col.timestamp.back() - col.timestamp.front();
+					const auto range_fraction = range / static_cast<double>(max_range);
+					const auto points_in_fraction = std::clamp(
+						static_cast<int>(std::ceil(range_fraction * static_cast<double>(col.timestamp.size()))), 1,
+						coerceCast<int>(col.timestamp.size()));
 
-					const auto data_points = coerceCast<int>(col.timestamp.size());
+					const auto data_points = points_in_fraction;
 					const auto reduction_factor = [&data_points, &max_data_points]() -> size_t {
 						if (data_points > max_data_points && max_data_points > 0) {
 							return coerceCast<size_t>(1 + ((data_points - 1) / max_data_points));
@@ -410,7 +418,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 	std::set_terminate(terminateHandler);
 
 	std::vector<std::filesystem::path> paths{};
-	int max_data_points = 100'000;
+	int max_data_points = 10'000;
 	bool show_console{false};
 	
 	{
