@@ -729,10 +729,13 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 	// Main loop
 	bool done{false};
-	bool open_selected{false};
-	bool select_folder{false};
+	bool is_ctrl_pressed{false};
+	
 	while (!done) {
 		SDL_Event event;
+		bool open_selected{false};
+		bool select_folder{false};
+
 		while (SDL_PollEvent(&event)) {
 			ImGui_ImplSDL3_ProcessEvent(&event);
 			if (event.type == SDL_EVENT_QUIT) {
@@ -751,6 +754,16 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 				if (event.key.key == SDLK_Q && (event.key.mod & SDL_KMOD_CTRL) != 0) {
 					done = true;
+				}
+
+				if ((event.key.mod & SDL_KMOD_CTRL) != 0) {
+					is_ctrl_pressed = true;
+				}
+			}
+
+			if (event.type == SDL_EVENT_KEY_UP) {
+				if ((event.key.mod & SDL_KMOD_CTRL) == 0) {
+					is_ctrl_pressed = false;
 				}
 			}
 
@@ -808,9 +821,6 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 				loading_start_time = std::chrono::steady_clock::now();
 				window_contexts.emplace_back(paths_expanded, loadCSVs);
 			}
-
-			open_selected = false;
-			select_folder = false;
 		}
 
 		for (size_t i = 1; auto &ctx : window_contexts) {
@@ -850,7 +860,14 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 					if (ImGui::BeginListBox("List Box", ImVec2(col_list_size.x, col_list_size.y))) {
 						for (auto &dct : dict) {
-							if (ImGui::Selectable(dct.name.c_str(), &dct.visible)) {}
+							if (ImGui::Selectable(dct.name.c_str(), &dct.visible)) {
+								if (is_ctrl_pressed) {
+									continue;
+								}
+
+								std::for_each(dict.begin(), dict.end(), [](auto &tmp) { tmp.visible = false; });
+								dct.visible = true;
+							}
 						}
 						ImGui::EndListBox();
 					}
