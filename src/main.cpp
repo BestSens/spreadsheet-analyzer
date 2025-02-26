@@ -26,6 +26,7 @@
 #include "implot.h"
 #include "nfd.hpp"
 #include "spdlog/spdlog.h"
+#include "utility.hpp"
 #include "uuid.h"
 #include "winapi.hpp"
 
@@ -385,6 +386,7 @@ namespace {
 	struct plot_data_t {
 		const data_dict_t *data;
 		size_t reduction_factor;
+		size_t start_index;
 	};
 
 	auto plotDict(int i, void *data) -> ImPlotPoint {
@@ -393,11 +395,29 @@ namespace {
 
 		const auto &plot_data = *static_cast<plot_data_t *>(data);
 		const auto &dd = *plot_data.data;
-		const auto index = static_cast<size_t>(i) * plot_data.reduction_factor;
+		const auto index = plot_data.start_index + (static_cast<size_t>(i) * plot_data.reduction_factor);
 		return ImPlotPoint(static_cast<double>(dd.timestamp[index]), dd.data[index]);
 	}
 
-	auto plotDataInSubplots(const std::vector<data_dict_t> &data, int max_data_points, const std::string &uuid)
+	auto getDateRange(const data_dict_t& data) -> std::pair<time_t, time_t> {
+		if (data.timestamp.empty()) {
+			return {0, 0};
+		}
+
+		return {data.timestamp.front(), data.timestamp.back()};
+	}
+
+	auto getIndicesFromTimeRange(const std::vector<time_t> date, const ImPlotRange &limits)
+		-> std::pair<size_t, size_t> {
+		const auto start = static_cast<time_t>(limits.Min);
+		const auto stop = static_cast<time_t>(limits.Max);
+		const auto start_it = std::lower_bound(date.begin(), date.end(), start);
+		const auto stop_it = std::upper_bound(date.begin(), date.end(), stop);
+
+		return {static_cast<size_t>(start_it - date.begin()), static_cast<size_t>(stop_it - date.begin())};
+	}
+
+	auto plotDataInSubplots(const std::vector<data_dict_t> &data, size_t max_data_points, const std::string &uuid)
 		-> void {
 		ImVec2 v_min = ImGui::GetWindowContentRegionMin();
 		ImVec2 v_max = ImGui::GetWindowContentRegionMax();
@@ -470,27 +490,20 @@ namespace {
 					ImPlot::SetupAxes("date", col.name.c_str());
 					ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Time);
 					ImPlot::SetupAxisFormat(ImAxis_Y1, fmt.c_str());
-					
+
+					const auto date_range = getDateRange(col);
+					ImPlot::SetupAxisLimits(ImAxis_X1, static_cast<double>(date_range.first),
+											static_cast<double>(date_range.second), ImGuiCond_Once);
+
 					const auto limits = ImPlot::GetPlotLimits(ImAxis_X1);
-					const auto range = limits.X.Max - limits.X.Min;
-					const auto max_range = col.timestamp.back() - col.timestamp.front();
-					const auto range_fraction = range / static_cast<double>(max_range);
-					const auto points_in_fraction = std::clamp(
-						static_cast<int>(std::ceil(range_fraction * static_cast<double>(col.timestamp.size()))), 1,
-						coerceCast<int>(col.timestamp.size()));
+					const auto [start_index, stop_index] = getIndicesFromTimeRange(col.timestamp, limits.X);
+					const auto points_in_range = stop_index - start_index;
+					const auto reduction_factor = std::clamp(fastCeil<size_t>(points_in_range, max_data_points), 1uz,
+															 std::numeric_limits<size_t>::max());
+					plot_data_t plot_data{
+						.data = &col, .reduction_factor = reduction_factor, .start_index = start_index};
 
-					const auto data_points = points_in_fraction;
-					const auto reduction_factor = [&data_points, &max_data_points]() -> size_t {
-						if (data_points > max_data_points && max_data_points > 0) {
-							return coerceCast<size_t>(1 + ((data_points - 1) / max_data_points));
-						} else {
-							return 1;
-						}
-					}();
-
-					plot_data_t plot_data{.data = &col, .reduction_factor = reduction_factor};
-					const auto count = coerceCast<int>(col.timestamp.size() / reduction_factor);
-
+					const auto count = coerceCast<int>(fastCeil(points_in_range, reduction_factor));
 					ImPlot::PlotLineG(col.name.c_str(), plotDict, &plot_data, count);
 					ImPlot::EndPlot();
 				}
@@ -846,7 +859,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 					ImGui::BeginChild("File content", ImVec2(window_size.x - 255, window_size.y - 20));
 					ImGui::PushFont(io.Fonts->Fonts[1]);
-					plotDataInSubplots(dict, max_data_points, ctx.getUUID());
+					plotDataInSubplots(dict, coerceCast<size_t>(max_data_points), ctx.getUUID());
 					ImGui::PopFont();
 					ImGui::EndChild();
 				} else {
