@@ -440,6 +440,8 @@ namespace {
 		const auto plot_height = v_max.y - v_min.y;
 		const auto plot_width = v_max.x - v_min.x;
 
+		max_data_points = std::max(max_data_points, 1uz);
+
 		const auto n_selected =
 			std::count_if(data.begin(), data.end(), [](const auto &dct) { return dct.visible; });
 
