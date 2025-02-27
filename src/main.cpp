@@ -853,6 +853,15 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 			}
 		}
 
+		if (!window_contexts.empty()) {
+			ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, io.DisplaySize.y - menu_size.y));
+			ImGui::SetNextWindowPos(ImVec2(0, menu_size.y));
+			ImGui::Begin("Backdrop", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+									   ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
+									   ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoCollapse);
+			ImGui::End();
+		}
+
 		for (size_t i = 1; auto &ctx : window_contexts) {
 			ImGui::PushID(ctx.getUUID().c_str());
 			ctx.checkForFinishedLoading();
