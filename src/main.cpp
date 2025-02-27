@@ -157,6 +157,16 @@ namespace {
 		}
 
 		auto loadFiles(const std::vector<std::filesystem::path> &paths, function_signature fn) -> void {
+			if (paths.empty()) {
+				return;
+			}
+
+			if (paths.size() > 1) {
+				this->window_title = paths.front().parent_path().filename().string();
+			} else {
+				this->window_title = paths.front().filename().string();
+			}
+
 			this->required_files = paths.size();
 			this->data_dict_f = std::async(std::launch::async, [this, fn, paths] {
 				return fn(paths, this->finished_files, this->stop_loading, false);
@@ -191,7 +201,7 @@ namespace {
 		}
 
 		auto getWindowID() const -> std::string {
-			return "Data view##" + this->getUUID();
+			return window_title + "##" + this->getUUID();
 		}
 
 		auto getUUID() const -> std::string {
@@ -207,6 +217,7 @@ namespace {
 		std::atomic<bool> stop_loading{false};
 		std::atomic<size_t> finished_files{0};
 		size_t required_files{0};
+		std::string window_title;
 		uuids::uuid uuid{UUIDGenerator::getInstance().generate()};
 	};
 
