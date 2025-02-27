@@ -745,11 +745,12 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 	bool is_shift_pressed{false};
 	
 	while (!done) {
-		SDL_Event event;
 		bool open_selected{false};
 		bool select_folder{false};
-
-		while (SDL_PollEvent(&event)) {
+		
+		{
+			SDL_Event event;
+			SDL_WaitEventTimeout(&event, 100);
 			ImGui_ImplSDL3_ProcessEvent(&event);
 			if (event.type == SDL_EVENT_QUIT) {
 				done = true;
@@ -793,11 +794,6 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 				io.FontGlobalScale = display_scale;
 				spdlog::debug("Display scale changed to {}x", display_scale);
 			}
-		}
-
-		if ((SDL_GetWindowFlags(window) & SDL_WINDOW_MINIMIZED) != 0) {
-			SDL_Delay(10);
-			continue;
 		}
 
 		ImGui_ImplSDLRenderer3_NewFrame();
