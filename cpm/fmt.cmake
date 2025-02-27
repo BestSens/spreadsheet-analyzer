@@ -1,9 +1,9 @@
 include(CPM)
 CPMAddPackage(
   NAME fmt
-  VERSION 11.0.2
-  URL https://github.com/fmtlib/fmt/releases/download/11.0.2/fmt-11.0.2.zip
-  URL_HASH MD5=c622dca45ec3fc95254c48370a9f7a1d
+  VERSION 11.1.4
+  URL https://github.com/fmtlib/fmt/releases/download/11.1.4/fmt-11.1.4.zip
+  URL_HASH MD5=ad6a56b15cddf4aad2a234e7cfc9e8c9
   OVERRIDE_FIND_PACKAGE
 )
 
