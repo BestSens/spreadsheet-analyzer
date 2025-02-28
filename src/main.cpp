@@ -624,8 +624,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 	std::vector<std::filesystem::path> commandline_paths{};
 	int max_data_points = 10'000;
-	bool show_console{false};
-	
+
 	{
 		cxxopts::Options options(argv[0], "Spreadsheet Analyzer");
 
@@ -653,17 +652,12 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 			if (result.count("verbose") == 1u) {
 				spdlog::set_level(spdlog::level::debug);
 				spdlog::info("verbose output enabled");
-				show_console = true;
 			}
 		} catch (const std::exception& e) {
 			spdlog::critical(e.what());
 			return EXIT_FAILURE;
 		}
 
-	}
-
-	if (!show_console) {
-		hideConsole();
 	}
 
 	bool parallel_loading = false;
