@@ -13,8 +13,8 @@
 
 class WindowContext {
 public:
-	using function_signature = std::function<std::vector<data_dict_t>(
-		std::vector<std::filesystem::path>, std::atomic<size_t> &, std::atomic<bool> &, bool)>;
+	using function_signature =
+		std::function<std::vector<data_dict_t>(std::vector<std::filesystem::path>, size_t &, const bool &, bool)>;
 
 	WindowContext() = default;
 	explicit WindowContext(std::vector<data_dict_t> new_data) : data{std::move(new_data)} {}
@@ -27,7 +27,7 @@ public:
 	~WindowContext() {
 		spdlog::debug("Destroying window context with UUID: {}", this->getUUID());
 		if (this->data_dict_f.valid()) {
-			this->stop_loading.store(true);
+			*this->stop_loading = true;
 			this->data_dict_f.wait();
 		}
 		spdlog::debug("Window context with UUID: {} destroyed", this->getUUID());
@@ -46,6 +46,14 @@ public:
 			this->data = std::move(other.data);
 			this->window_open = other.window_open;
 			this->scheduled_for_deletion = other.scheduled_for_deletion;
+			
+			std::swap(this->finished_files, other.finished_files);
+			std::swap(this->stop_loading, other.stop_loading);
+			std::swap(this->data_dict_f, other.data_dict_f);
+			std::swap(this->required_files, other.required_files);
+			std::swap(this->window_title, other.window_title);
+			std::swap(this->uuid, other.uuid);
+			spdlog::debug("Moved window context with UUID: {}", this->getUUID());
 		}
 
 		return *this;
@@ -76,7 +84,7 @@ public:
 	}
 
 	auto scheduleForDeletion() -> void {
-		this->stop_loading.store(true);
+		*this->stop_loading = true;
 		this->scheduled_for_deletion = true;
 	}
 
@@ -93,7 +101,9 @@ public:
 
 		this->required_files = paths.size();
 		this->data_dict_f = std::async(std::launch::async, [this, fn, paths] {
-			return fn(paths, this->finished_files, this->stop_loading, false);
+			auto &temp_finished_files = *this->finished_files;
+			const auto &temp_stop_loading = *this->stop_loading;
+			return fn(paths, temp_finished_files, temp_stop_loading, false);
 		});
 	}
 
@@ -117,16 +127,15 @@ public:
 	auto getLoadingStatus() -> loading_status_t {
 		const auto is_loading = this->data_dict_f.valid() &&
 								this->data_dict_f.wait_for(std::chrono::seconds(0)) != std::future_status::ready;
-		return {.is_loading = is_loading,
-				.finished_files = this->finished_files.load(),
-				.required_files = this->required_files};
+		return {
+			.is_loading = is_loading, .finished_files = *this->finished_files, .required_files = this->required_files};
 	}
 
-	auto getWindowID() const -> std::string {
+	[[nodiscard]] auto getWindowID() const -> std::string {
 		return window_title + "##" + this->getUUID();
 	}
 
-	auto getUUID() const -> std::string {
+	[[nodiscard]] auto getUUID() const -> std::string {
 		return uuids::to_string(this->uuid);
 	}
 
@@ -136,8 +145,9 @@ private:
 	bool scheduled_for_deletion{false};
 	std::future<std::vector<data_dict_t>> data_dict_f{};
 
-	std::atomic<bool> stop_loading{false};
-	std::atomic<size_t> finished_files{0};
+	// should be fine to use these without locking as they are only written on one thread
+	std::unique_ptr<bool> stop_loading{std::make_unique<bool>(false)};
+	std::unique_ptr<size_t> finished_files{std::make_unique<size_t>(0)};
 	size_t required_files{0};
 	std::string window_title;
 	uuids::uuid uuid{UUIDGenerator::getInstance().generate()};

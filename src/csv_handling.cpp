@@ -135,8 +135,8 @@ auto preparePaths(std::vector<std::filesystem::path> paths) -> std::vector<std::
 	return files;
 }
 
-auto loadCSVs(const std::vector<std::filesystem::path> &paths, std::atomic<size_t> &finished,
-			  std::atomic<bool> &stop_loading, bool parallel_loading) -> std::vector<data_dict_t> {
+auto loadCSVs(const std::vector<std::filesystem::path> &paths, size_t &finished, const bool &stop_loading,
+			  bool parallel_loading) -> std::vector<data_dict_t> {
 	if (paths.empty()) {
 		return {};
 	}
