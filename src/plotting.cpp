@@ -41,12 +41,18 @@ namespace {
 		return {static_cast<double>(dd.timestamp[index]), dd.data[index]};
 	}
 
-	auto getDateRange(const data_dict_t &data) -> std::pair<time_t, time_t> {
+	auto getDateRange(const data_dict_t &data) -> std::pair<double, double> {
 		if (data.timestamp.empty()) {
 			return {0, 0};
 		}
 
-		return {data.timestamp.front(), data.timestamp.back()};
+		const auto date_min = static_cast<double>(data.timestamp.front());
+		const auto date_max = static_cast<double>(data.timestamp.back());
+
+		const auto padding_percent = ImPlot::GetStyle().FitPadding.x;
+		const auto full_range = date_max - date_min;
+		const auto padding = full_range * static_cast<double>(padding_percent);
+		return {date_min - padding, date_max + padding};
 	}
 
 	auto getIndicesFromTimeRange(const std::vector<time_t> &date, const ImPlotRange &limits)
@@ -79,6 +85,16 @@ namespace {
 		return {static_cast<double>(date_min), static_cast<double>(date_max)};
 	}
 
+	auto getPaddedXLims(const std::vector<data_dict_t> &data) -> std::pair<double, double> {
+		auto [date_min, date_max] = getXLims(data);
+
+		const auto padding_percent = ImPlot::GetStyle().FitPadding.x;
+		const auto full_range = date_max - date_min;
+		const auto padding = full_range * static_cast<double>(padding_percent);
+
+		return {date_min - padding, date_max + padding};
+	}
+
 	[[maybe_unused]] auto fixSubplotRanges(const std::vector<data_dict_t> &data) -> void {
 		auto *implot_ctx = ImPlot::GetCurrentContext();
 		auto *subplot = implot_ctx->CurrentSubplot;
@@ -89,7 +105,7 @@ namespace {
 
 		auto data_min = std::numeric_limits<double>::max();
 		auto data_max = std::numeric_limits<double>::lowest();
-		const auto [date_min, date_max] = getXLims(data);
+		const auto [date_min, date_max] = getPaddedXLims(data);
 
 		for (const auto &col : data) {
 			if (!col.visible) {
@@ -106,12 +122,8 @@ namespace {
 
 		for (auto &col_link_data : subplot->ColLinkData) {
 			if (col_link_data.Min == 0 && col_link_data.Max == 1) {
-				const auto padding_percent = ImPlot::GetStyle().FitPadding.x;
-				const auto full_range = date_max - date_min;
-				const auto padding = full_range * static_cast<double>(padding_percent);
-
-				col_link_data.Min = static_cast<double>(date_min) - padding;
-				col_link_data.Max = static_cast<double>(date_max) + padding;
+				col_link_data.Min = date_min;
+				col_link_data.Max = date_max;
 			}
 		}
 
@@ -161,12 +173,16 @@ auto plotDataInSubplots(const std::vector<data_dict_t> &data, size_t max_data_po
 	const auto subplot_flags =
 		(n_selected > 1 ? ImPlotSubplotFlags_ShareItems : 0) | (!global_x_link ? ImPlotSubplotFlags_LinkAllX : 0);
 
-	static auto [global_link_min, global_link_max] = getXLims(data);
+	static auto [global_link_min, global_link_max] = getPaddedXLims(data);
 
 	if (ImPlot::BeginSubplots(subplot_id.c_str(), rows, cols, ImVec2(plot_width, plot_height), subplot_flags)) {
 		if (!global_x_link) {
 			fixSubplotRanges(data);
 		}
+
+		const auto* current_subplot = ImPlot::GetCurrentContext()->CurrentSubplot;
+		const auto current_flags = current_subplot->Flags;
+		const auto is_x_linked = global_x_link || (current_flags & ImPlotSubplotFlags_LinkAllX) != 0;
 
 		for (int i = 0; const auto &col : data) {
 			if (!col.visible) {
@@ -197,9 +213,7 @@ auto plotDataInSubplots(const std::vector<data_dict_t> &data, size_t max_data_po
 						return true;
 					}
 
-					const auto flags = ImPlot::GetCurrentContext()->CurrentSubplot->Flags;
-					return (flags & ImPlotSubplotFlags_LinkAllX) == 0 && (flags & ImPlotSubplotFlags_LinkCols) == 0 &&
-						   !global_x_link;
+					return (!is_x_linked && !global_x_link);
 				}();
 				++i;
 
@@ -208,9 +222,22 @@ auto plotDataInSubplots(const std::vector<data_dict_t> &data, size_t max_data_po
 				ImPlot::SetupAxes("date", col.name.c_str(), x_axis_flags);
 				ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Time);
 				ImPlot::SetupAxisFormat(ImAxis_Y1, fmt.c_str());
-				const auto date_range = getDateRange(col);
-				ImPlot::SetupAxisLimits(ImAxis_X1, static_cast<double>(date_range.first),
-										static_cast<double>(date_range.second), ImGuiCond_Once);
+
+				const auto date_range = [is_x_linked, global_x_link, current_subplot, &col]() {
+					if (is_x_linked) {
+						if (global_x_link) {
+							return std::pair{global_link_min, global_link_max};
+						}
+
+						const auto min = current_subplot->ColLinkData[0].Min;
+						const auto max = current_subplot->ColLinkData[0].Max;
+
+						return std::pair{min, max};
+					}
+
+					return getDateRange(col);
+				}();
+				ImPlot::SetupAxisLimits(ImAxis_X1, date_range.first, date_range.second, ImGuiCond_Once);
 
 				const auto limits = ImPlot::GetPlotLimits(ImAxis_X1);
 				const auto [start_index, stop_index] = getIndicesFromTimeRange(col.timestamp, limits.X);
