@@ -58,6 +58,7 @@ namespace {
 	}
 }  // namespace
 
+#pragma comment(linker, "/SUBSYSTEM:windows /ENTRY:mainCRTStartup")
 auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognitive-complexity)
 	std::set_terminate(terminateHandler);
 
