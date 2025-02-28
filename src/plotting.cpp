@@ -168,7 +168,7 @@ auto plotDataInSubplots(const std::vector<data_dict_t> &data, size_t max_data_po
 			fixSubplotRanges(data);
 		}
 
-		for (const auto &col : data) {
+		for (int i = 0; const auto &col : data) {
 			if (!col.visible) {
 				continue;
 			}
@@ -192,10 +192,22 @@ auto plotDataInSubplots(const std::vector<data_dict_t> &data, size_t max_data_po
 					return "%g " + col.unit;
 				}();
 
-				ImPlot::SetupAxes("date", col.name.c_str());
+				const auto show_x_axis = [&]() -> bool {
+					if (i == n_selected - 1) {
+						return true;
+					}
+
+					const auto flags = ImPlot::GetCurrentContext()->CurrentSubplot->Flags;
+					return (flags & ImPlotSubplotFlags_LinkAllX) == 0 && (flags & ImPlotSubplotFlags_LinkCols) == 0 &&
+						   !global_x_link;
+				}();
+				++i;
+
+				const auto x_axis_flags = (!show_x_axis ? ImPlotAxisFlags_NoTickLabels : 0) | ImPlotAxisFlags_NoLabel;
+
+				ImPlot::SetupAxes("date", col.name.c_str(), x_axis_flags);
 				ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Time);
 				ImPlot::SetupAxisFormat(ImAxis_Y1, fmt.c_str());
-
 				const auto date_range = getDateRange(col);
 				ImPlot::SetupAxisLimits(ImAxis_X1, static_cast<double>(date_range.first),
 										static_cast<double>(date_range.second), ImGuiCond_Once);
