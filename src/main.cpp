@@ -853,27 +853,16 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 			}
 		}
 
-		if (!window_contexts.empty()) {
-			ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x, io.DisplaySize.y - menu_size.y));
-			ImGui::SetNextWindowPos(ImVec2(0, menu_size.y));
-			ImGui::Begin("Backdrop", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-									   ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
-									   ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoCollapse);
-			ImGui::End();
-		}
+		const auto dockspace = ImGui::DockSpaceOverViewport(ImGui::GetID("DockSpace"), ImGui::GetMainViewport(),
+															ImGuiDockNodeFlags_PassthruCentralNode);
 
-		for (size_t i = 1; auto &ctx : window_contexts) {
+		for (auto &ctx : window_contexts) {
 			ImGui::PushID(ctx.getUUID().c_str());
 			ctx.checkForFinishedLoading();
 			auto &dict = ctx.getData();
 			auto window_open = ctx.getWindowOpenRef();
-
-			ImGui::SetNextWindowSize(ImVec2(io.DisplaySize.x * 0.75f, (io.DisplaySize.y - menu_size.y) * 0.75f),
-									 ImGuiCond_Once);
-			ImGui::SetNextWindowPos(ImVec2(static_cast<float>(i) * 25.0f, static_cast<float>(i) * 25.0f + menu_size.y),
-									ImGuiCond_Once);
-			++i;
-
+			
+			ImGui::SetNextWindowDockID(dockspace, ImGuiCond_Once);
 			ImGui::Begin(ctx.getWindowID().c_str(), &window_open,
 						 ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
