@@ -8,3 +8,5 @@ CPMAddPackage(
 )
 
 find_package(fmt)
+
+set_target_properties(fmt PROPERTIES INTERFACE_SYSTEM_INCLUDE_DIRECTORIES $<TARGET_PROPERTY:fmt,INTERFACE_INCLUDE_DIRECTORIES>)
