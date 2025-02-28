@@ -38,6 +38,7 @@ extern "C" const unsigned char logo_data[];
 extern "C" const size_t logo_data_size;
 
 SDL_Surface *window_icon{nullptr};
+float display_scale{1.0f};
 
 namespace {
 	auto terminateHandler() -> void {
@@ -152,7 +153,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 		}
 	}
 
-	auto display_scale = SDL_GetWindowDisplayScale(window);
+	display_scale = SDL_GetWindowDisplayScale(window);
 	spdlog::debug("Display scale: {}x", display_scale);
 
 	IMGUI_CHECKVERSION();
@@ -397,10 +398,10 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 		SDL_RenderClear(renderer);
 
 		const SDL_FRect texture_rect{
-			.x = io.DisplaySize.x - logo_size.x - 30.0f,
-			.y = io.DisplaySize.y - logo_size.y - 30.0f,
-			.w = logo_size.x,
-			.h = logo_size.y
+			.x = io.DisplaySize.x - (logo_size.x * display_scale) - (30.0f * display_scale),
+			.y = io.DisplaySize.y - (logo_size.y * display_scale) - (30.0f * display_scale),
+			.w = logo_size.x * display_scale,
+			.h = logo_size.y * display_scale
 		};
 
 		if (logo_texture != nullptr) {

@@ -12,6 +12,7 @@
 #include "winapi.hpp"
 
 extern SDL_Surface* window_icon;  //NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+extern float display_scale;
 
 namespace {
 	struct Library {
@@ -42,7 +43,7 @@ auto showAboutScreen(bool& show_about, SDL_Renderer* renderer) -> void {
 	}
 
 	const auto viewport_size = ImGui::GetIO().DisplaySize;
-	const auto window_size = ImVec2{500, 700};
+	const auto window_size = ImVec2{500 * display_scale, 700 * display_scale};
 	const auto window_pos = ImVec2{(viewport_size.x - window_size.x) * 0.5f, (viewport_size.y - window_size.y) * 0.5f};
 	
 	ImGui::SetNextWindowSize(window_size, ImGuiCond_FirstUseEver);
@@ -73,8 +74,8 @@ auto showAboutScreen(bool& show_about, SDL_Renderer* renderer) -> void {
 
 		// Display the icon with padding
 		if (icon_texture != 0) {
-			const float icon_size = 128.0f;
-			const float padding = 10.0f;  // Padding amount
+			const float icon_size = 128.0f * display_scale;
+			const float padding = 10.0f * display_scale;  // Padding amount
 			
 			// Add padding before image
 			ImGui::Dummy(ImVec2(0.0f, padding));
@@ -104,8 +105,8 @@ auto showAboutScreen(bool& show_about, SDL_Renderer* renderer) -> void {
 
 		for (const auto &library : libraries) {
 			ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetColorU32(ImGuiCol_TableHeaderBg));
-			ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 50);
-			ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {12, 3});
+			ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 50.0f * display_scale);
+			ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {12.0f * display_scale, 3.0f * display_scale});
 
 			if (ImGui::BeginChild(
 					library.link, ImVec2(),
@@ -118,7 +119,7 @@ auto showAboutScreen(bool& show_about, SDL_Renderer* renderer) -> void {
 			ImGui::EndChild();
 
 			ImGui::SameLine();
-			if (ImGui::GetCursorPosX() > (width - 150.0f)) {
+			if (ImGui::GetCursorPosX() > (width - (150.0f * display_scale))) {
 				ImGui::NewLine();
 			}
 
