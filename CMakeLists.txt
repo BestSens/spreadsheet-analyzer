@@ -25,7 +25,11 @@ add_executable(spreadsheet_analyzer
 	src/main.cpp
 	src/about_screen.cpp
 	src/imgui_extensions.cpp
+	src/csv_handling.cpp
+	src/plotting.cpp
+	src/file_dialog.cpp
 	src/winapi.cpp
+	src/fonts.cpp
 	src/textures.c
 )
 

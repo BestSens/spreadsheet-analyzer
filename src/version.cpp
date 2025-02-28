@@ -6,8 +6,10 @@
 #include "fmt/format.h"
 #include "version_info.hpp"
 
-constexpr auto stringsEqual(const char* a, const char* b) -> bool {
-	return *a == *b && (*a == '\0' || stringsEqual(a + 1, b + 1));
+namespace {
+	constexpr auto stringsEqual(const char* a, const char* b) -> bool {
+		return *a == *b && (*a == '\0' || stringsEqual(a + 1, b + 1));
+	}
 }
 
 auto appIsDev() -> bool {

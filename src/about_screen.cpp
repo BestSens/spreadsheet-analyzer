@@ -4,6 +4,7 @@
 
 #include "SDL3/SDL.h"
 #include "fmt/format.h"
+#include "fonts.hpp"
 #include "imgui.h"
 #include "imgui_extensions.hpp"
 #include "imgui_internal.h"
@@ -51,8 +52,7 @@ auto showAboutScreen(bool& show_about, SDL_Renderer* renderer) -> void {
 
 	ImGui::Spacing();
 	
-	const auto &io = ImGui::GetIO();
-	ImGui::PushFont(io.Fonts->Fonts[2]);
+	ImGui::PushFont(getFont(fontList::ROBOTO_MONO_20));
 	ImGuiExt::TextUnformattedCentered("Spreadsheet Analyzer");
 	ImGui::PopFont();
 	ImGuiExt::TextUnformattedCentered("Copyright © 2024 BestSens AG");
