@@ -4,9 +4,16 @@
 #include <windows.h>
 #endif
 
+#ifdef __linux__
+#include <unistd.h>
+#include <sys/types.h>
+#endif
+
 #include <stdexcept>
 #include <string>
 #include <vector>
+
+#include "spdlog/spdlog.h"
 
 #ifdef __linux__
 auto executeCmd(const std::vector<std::string> &argsVector) -> void {

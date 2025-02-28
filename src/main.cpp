@@ -3,6 +3,7 @@
 #include <ctime>
 #include <exception>
 #include <filesystem>
+#include <list>
 #include <ranges>
 #include <string>
 #include <string_view>
@@ -59,7 +60,9 @@ namespace {
 	}
 }  // namespace
 
+#if defined(_WIN32)
 #pragma comment(linker, "/SUBSYSTEM:windows /ENTRY:mainCRTStartup")
+#endif
 auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognitive-complexity)
 	std::set_terminate(terminateHandler);
 
@@ -121,8 +124,8 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 	}
 
 	spdlog::debug("SDL Initialized");
-	const auto window_flags = static_cast<SDL_WindowFlags>(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE |
-														   SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_MAXIMIZED);
+	const SDL_WindowFlags window_flags =
+		SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_MAXIMIZED;
 	auto *window = SDL_CreateWindow("Spreadsheet Analyzer", 1280, 720, window_flags);
 	auto *renderer = SDL_CreateRenderer(window, nullptr);
 	SDL_SetRenderVSync(renderer, 1);
