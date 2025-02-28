@@ -16,6 +16,7 @@
 #include "SDL3/SDL_main.h"
 #include "SDL3/SDL_opengl.h"
 #include "SDL3_image/SDL_image.h"
+#include "about_screen.hpp"
 #include "backends/imgui_impl_sdl3.h"
 #include "backends/imgui_impl_sdlrenderer3.h"
 #include "csv.hpp"
@@ -40,6 +41,8 @@ extern "C" const size_t icon_data_size;
 
 extern "C" const unsigned char logo_data[];
 extern "C" const size_t logo_data_size;
+
+SDL_Surface *window_icon{nullptr};
 
 namespace {
 	struct data_dict_t {
@@ -623,7 +626,8 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 	std::set_terminate(terminateHandler);
 
 	std::vector<std::filesystem::path> commandline_paths{};
-	int max_data_points = 10'000;
+	int max_data_points{10'000};
+	bool show_debug_menu{false};
 
 	{
 		cxxopts::Options options(argv[0], "Spreadsheet Analyzer");
@@ -651,6 +655,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 			if (result.count("verbose") == 1u) {
 				spdlog::set_level(spdlog::level::debug);
+				show_debug_menu = true;
 				spdlog::info("verbose output enabled");
 			}
 		} catch (const std::exception& e) {
@@ -688,7 +693,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 	SDL_SetRenderVSync(renderer, 1);
 
 	// NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
-	auto* window_icon = IMG_LoadPNG_IO(SDL_IOFromMem(const_cast<unsigned char*>(icon_data), icon_data_size));
+	window_icon = IMG_LoadPNG_IO(SDL_IOFromMem(const_cast<unsigned char*>(icon_data), icon_data_size));
 	SDL_SetWindowIcon(window, window_icon);
 
 	SDL_ShowWindow(window);
@@ -725,6 +730,8 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 											 static_cast<int>(font_roboto_sans_compressed_size), 16.0f);
 	io.Fonts->AddFontFromMemoryCompressedTTF(static_cast<const void *>(font_roboto_mono_compressed_data),
 											 static_cast<int>(font_roboto_mono_compressed_size), 16.0f);
+	io.Fonts->AddFontFromMemoryCompressedTTF(static_cast<const void *>(font_roboto_mono_compressed_data),
+											 static_cast<int>(font_roboto_mono_compressed_size), 20.0f);
 	io.FontDefault = io.Fonts->Fonts[0];
 	io.FontGlobalScale = display_scale;
 
@@ -750,6 +757,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 	bool done{false};
 	bool is_ctrl_pressed{false};
 	bool is_shift_pressed{false};
+	bool show_about{false};
 	
 	while (!done) {
 		bool open_selected{false};
@@ -819,18 +827,25 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 				ImGui::EndMenu();
 			}
 
-			if (ImGui::BeginMenu("Debug")) {
-				if (ImGui::MenuItem("Parallel loading", nullptr, &parallel_loading)) {}
-				ImGui::InputInt("Max data points", &max_data_points);
-				ImGui::Separator();
-				const auto fps_str = fmt::format("{:.3f} ms/frame ({:.1f} FPS)", 1000.0f / ImGui::GetIO().Framerate,
-												 ImGui::GetIO().Framerate);
-				ImGui::Text("%s", fps_str.c_str());	 // NOLINT(hicpp-vararg)
-				const auto last_loading_str =
-					fmt::format("Last loading took {:.3f} s",
-								std::chrono::duration<double>(loading_end_time - loading_start_time).count());
-				ImGui::Text("%s", last_loading_str.c_str());  // NOLINT(hicpp-vararg)
+			if (ImGui::BeginMenu("Help")) {
+				ImGui::MenuItem("About", nullptr, &show_about);
 				ImGui::EndMenu();
+			}
+
+			if (show_debug_menu) {
+				if (ImGui::BeginMenu("Debug")) {
+					if (ImGui::MenuItem("Parallel loading", nullptr, &parallel_loading)) {}
+					ImGui::InputInt("Max data points", &max_data_points);
+					ImGui::Separator();
+					const auto fps_str = fmt::format("{:.3f} ms/frame ({:.1f} FPS)", 1000.0f / ImGui::GetIO().Framerate,
+													ImGui::GetIO().Framerate);
+					ImGui::Text("%s", fps_str.c_str());	 // NOLINT(hicpp-vararg)
+					const auto last_loading_str =
+						fmt::format("Last loading took {:.3f} s",
+									std::chrono::duration<double>(loading_end_time - loading_start_time).count());
+					ImGui::Text("%s", last_loading_str.c_str());  // NOLINT(hicpp-vararg)
+					ImGui::EndMenu();
+				}
 			}
 
 			menu_size = ImGui::GetWindowSize();
@@ -846,6 +861,8 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 				window_contexts.emplace_back(paths_expanded, loadCSVs);
 			}
 		}
+
+		showAboutScreen(show_about, renderer);
 
 		const auto dockspace = ImGui::DockSpaceOverViewport(ImGui::GetID("DockSpace"), ImGui::GetMainViewport(),
 															ImGuiDockNodeFlags_PassthruCentralNode);

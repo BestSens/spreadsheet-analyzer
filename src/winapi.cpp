@@ -45,3 +45,15 @@ auto hideConsole() -> void {
 	}
 #endif
 }
+
+auto openWebpage(std::string url) -> void {
+	if (url.find("://") == std::string::npos) {
+		url = "https://" + url;
+	}
+
+#if defined(_WIN32)
+	ShellExecuteA(nullptr, "open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+#else
+#warning "Unknown OS, can't open webpages"
+#endif
+}

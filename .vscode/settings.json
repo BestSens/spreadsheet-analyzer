@@ -97,6 +97,7 @@
 		"typeindex": "cpp",
 		"variant": "cpp",
 		"resumable": "cpp",
-		"future": "cpp"
+		"future": "cpp",
+		"string_view": "cpp"
 	}
 }

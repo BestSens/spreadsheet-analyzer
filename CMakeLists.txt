@@ -23,6 +23,8 @@ endif()
 
 add_executable(spreadsheet_analyzer
 	src/main.cpp
+	src/about_screen.cpp
+	src/imgui_extensions.cpp
 	src/winapi.cpp
 	src/textures.c
 )
@@ -60,6 +62,7 @@ include(uuid)
 include(roboto_sans)
 include(roboto_mono)
 include(compiler_warnings)
+include(version)
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND CMAKE_BUILD_TYPE MATCHES "Debug")
 	target_compile_options(spreadsheet_analyzer PRIVATE
@@ -74,6 +77,8 @@ endif()
 
 target_link_libraries(spreadsheet_analyzer PRIVATE
 	common_warnings
+	bestsens_version
+
 	imgui
 	implot
 	SDL3::SDL3
@@ -87,6 +92,7 @@ target_link_libraries(spreadsheet_analyzer PRIVATE
 	nfd
 	expected
 	stduuid
+
 	roboto_sans
 	roboto_mono
 )
