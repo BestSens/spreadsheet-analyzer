@@ -9,7 +9,7 @@
 
 #include "spdlog/spdlog.h"
 #include "uuid_generator.hpp"
-#include "uuids.h"
+#include "uuid.h"
 
 class WindowContext {
 public:
