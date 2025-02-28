@@ -103,15 +103,12 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 	}
 
 	bool parallel_loading = false;
-	std::chrono::time_point<std::chrono::steady_clock> loading_start_time{};
-	std::chrono::time_point<std::chrono::steady_clock> loading_end_time{};
 
 	std::list<WindowContext> window_contexts{};
 
 	{
 		const auto paths_expanded = preparePaths(commandline_paths);
 
-		loading_start_time = std::chrono::steady_clock::now();
 		if (!paths_expanded.empty()) {
 			window_contexts.emplace_back(paths_expanded, loadCSVs);
 		}
@@ -280,10 +277,6 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 					const auto fps_str = fmt::format("{:.3f} ms/frame ({:.1f} FPS)", 1000.0f / ImGui::GetIO().Framerate,
 													ImGui::GetIO().Framerate);
 					ImGui::Text("%s", fps_str.c_str());	 // NOLINT(hicpp-vararg)
-					const auto last_loading_str =
-						fmt::format("Last loading took {:.3f} s",
-									std::chrono::duration<double>(loading_end_time - loading_start_time).count());
-					ImGui::Text("%s", last_loading_str.c_str());  // NOLINT(hicpp-vararg)
 					ImGui::EndMenu();
 				}
 			}
@@ -297,7 +290,6 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 			if (!paths.empty()) {
 				const auto paths_expanded = preparePaths(paths);
-				loading_start_time = std::chrono::steady_clock::now();
 				window_contexts.emplace_back(paths_expanded, loadCSVs);
 			}
 		}
