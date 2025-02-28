@@ -6,4 +6,5 @@
 
 #include "dicts.hpp"
 
-auto plotDataInSubplots(const std::vector<data_dict_t> &data, size_t max_data_points, const std::string &uuid) -> void;
+auto plotDataInSubplots(const std::vector<data_dict_t> &data, size_t max_data_points, const std::string &uuid,
+						bool global_x_link) -> void;

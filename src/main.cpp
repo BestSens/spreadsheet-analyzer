@@ -192,6 +192,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 	bool is_ctrl_pressed{false};
 	bool is_shift_pressed{false};
 	bool show_about{false};
+	bool link_x_global{false};
 	
 	while (!done) {
 		bool open_selected{false};
@@ -258,6 +259,11 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 				}
 				ImGui::Separator();
 				if (ImGui::MenuItem("Exit", "Ctrl+Q", &done)) {}
+				ImGui::EndMenu();
+			}
+
+			if (ImGui::BeginMenu("Settings")) {
+				ImGui::MenuItem("Link x-axes globally", nullptr, &link_x_global);
 				ImGui::EndMenu();
 			}
 
@@ -371,7 +377,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 					ImGui::BeginChild("File content", ImVec2(window_size.x - 255, window_size.y - 20));
 					ImGui::PushFont(getFont(fontList::ROBOTO_MONO_16));
-					plotDataInSubplots(dict, coerceCast<size_t>(max_data_points), ctx.getUUID());
+					plotDataInSubplots(dict, coerceCast<size_t>(max_data_points), ctx.getUUID(), link_x_global);
 					ImGui::PopFont();
 					ImGui::EndChild();
 				} else {

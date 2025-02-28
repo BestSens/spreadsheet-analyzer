@@ -10,6 +10,8 @@
 #include "dicts.hpp"
 #include "imgui.h"
 #include "implot.h"
+#include "implot_internal.h"
+#include "spdlog/spdlog.h"
 #include "utility.hpp"
 
 namespace {
@@ -56,11 +58,72 @@ namespace {
 
 		return {static_cast<size_t>(start_it - date.begin()), static_cast<size_t>(stop_it - date.begin())};
 	}
+
+	auto getXLims(const std::vector<data_dict_t> &data) -> std::pair<double, double> {
+		auto date_min = std::numeric_limits<time_t>::max();
+		auto date_max = std::numeric_limits<time_t>::lowest();
+
+		for (const auto &col : data) {
+			if (!col.visible) {
+				continue;
+			}
+
+			if (col.timestamp.empty()) {
+				continue;
+			}
+
+			date_min = std::min(date_min, col.timestamp.front());
+			date_max = std::max(date_max, col.timestamp.back());
+		}
+
+		return {static_cast<double>(date_min), static_cast<double>(date_max)};
+	}
+
+	[[maybe_unused]] auto fixSubplotRanges(const std::vector<data_dict_t> &data) -> void {
+		auto *implot_ctx = ImPlot::GetCurrentContext();
+		auto *subplot = implot_ctx->CurrentSubplot;
+
+		if (subplot == nullptr) {
+			return;
+		}
+
+		auto data_min = std::numeric_limits<double>::max();
+		auto data_max = std::numeric_limits<double>::lowest();
+		const auto [date_min, date_max] = getXLims(data);
+
+		for (const auto &col : data) {
+			if (!col.visible) {
+				continue;
+			}
+
+			if (col.timestamp.empty()) {
+				continue;
+			}
+
+			data_min = std::min(data_min, *std::ranges::min_element(col.data));
+			data_max = std::max(data_max, *std::ranges::max_element(col.data));
+		}
+
+		for (auto &col_link_data : subplot->ColLinkData) {
+			if (col_link_data.Min == 0 && col_link_data.Max == 1) {
+				col_link_data.Min = static_cast<double>(date_min);
+				col_link_data.Max = static_cast<double>(date_max);
+			}
+		}
+
+		for (auto &row_link_data : subplot->RowLinkData) {
+			if (row_link_data.Min == 0 && row_link_data.Max == 1) {
+				row_link_data.Min = data_min;
+				row_link_data.Max = data_max;
+			}
+		}
+	}
 }  // namespace
 
-auto plotDataInSubplots(const std::vector<data_dict_t> &data, size_t max_data_points, const std::string &uuid) -> void {
-	ImVec2 v_min = ImGui::GetWindowContentRegionMin();
-	ImVec2 v_max = ImGui::GetWindowContentRegionMax();
+auto plotDataInSubplots(const std::vector<data_dict_t> &data, size_t max_data_points, const std::string &uuid,
+						bool global_x_link) -> void {
+	auto v_min = ImGui::GetWindowContentRegionMin();
+	auto v_max = ImGui::GetWindowContentRegionMax();
 
 	v_min.x += ImGui::GetWindowPos().x;
 	v_min.y += ImGui::GetWindowPos().y;
@@ -78,27 +141,6 @@ auto plotDataInSubplots(const std::vector<data_dict_t> &data, size_t max_data_po
 		return;
 	}
 
-	// time_t date_max = std::numeric_limits<time_t>::lowest();
-	// time_t date_min = std::numeric_limits<time_t>::max();
-
-	// for (const auto &col : data) {
-	// 	if (!col.visible) {
-	// 		continue;
-	// 	}
-
-	// 	if (col.timestamp.empty()) {
-	// 		continue;
-	// 	}
-
-	// 	if (col.timestamp.at(0) < date_min) {
-	// 		date_min = col.timestamp.at(0);
-	// 	}
-
-	// 	if (col.timestamp.at(col.timestamp.size() - 1) > date_max) {
-	// 		date_max = col.timestamp.at(col.timestamp.size() - 1);
-	// 	}
-	// }
-
 	const auto [rows, cols] = [n_selected]() -> std::pair<int, int> {
 		if (n_selected <= 3) {
 			return {n_selected, 1};
@@ -108,16 +150,28 @@ auto plotDataInSubplots(const std::vector<data_dict_t> &data, size_t max_data_po
 	}();
 
 	const auto subplot_id = "##" + uuid;
-	if (ImPlot::BeginSubplots(subplot_id.c_str(), rows, cols, ImVec2(plot_width, plot_height),
-							  ImPlotSubplotFlags_ShareItems)) {
+	const auto subplot_flags =
+		(n_selected > 1 ? ImPlotSubplotFlags_ShareItems : 0) | (!global_x_link ? ImPlotSubplotFlags_LinkAllX : 0);
+
+	static auto [global_link_min, global_link_max] = getXLims(data);
+
+	if (ImPlot::BeginSubplots(subplot_id.c_str(), rows, cols, ImVec2(plot_width, plot_height), subplot_flags)) {
+		if (!global_x_link) {
+			fixSubplotRanges(data);
+		}
+
 		for (const auto &col : data) {
 			if (!col.visible) {
 				continue;
 			}
 
+			if (global_x_link) {
+				ImPlot::SetNextAxisLinks(ImAxis_X1, &global_link_min, &global_link_max);
+			}
+
 			const auto plot_title = col.name + "##" + col.uuid;
 			if (ImPlot::BeginPlot(plot_title.c_str(), ImVec2(plot_width, plot_height),
-								  ImPlotFlags_NoLegend | ImPlotFlags_NoTitle)) {
+								  (n_selected < 1 ? ImPlotFlags_NoLegend : 0) | ImPlotFlags_NoTitle)) {
 				const auto fmt = [&col]() -> std::string {
 					if (col.unit.empty()) {
 						return "%g";
