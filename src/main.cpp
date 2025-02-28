@@ -321,6 +321,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 			ImPlot::GetStyle().UseLocalTime = false;
 			ImPlot::GetStyle().UseISO8601 = true;
 			ImPlot::GetStyle().Use24HourClock = true;
+			ImPlot::GetStyle().FitPadding = ImVec2(0.0f, 0.1f);
 
 			const auto loading_status = ctx.getLoadingStatus();
 

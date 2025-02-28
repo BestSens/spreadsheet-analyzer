@@ -106,15 +106,23 @@ namespace {
 
 		for (auto &col_link_data : subplot->ColLinkData) {
 			if (col_link_data.Min == 0 && col_link_data.Max == 1) {
-				col_link_data.Min = static_cast<double>(date_min);
-				col_link_data.Max = static_cast<double>(date_max);
+				const auto padding_percent = ImPlot::GetStyle().FitPadding.x;
+				const auto full_range = date_max - date_min;
+				const auto padding = full_range * static_cast<double>(padding_percent);
+
+				col_link_data.Min = static_cast<double>(date_min) - padding;
+				col_link_data.Max = static_cast<double>(date_max) + padding;
 			}
 		}
 
 		for (auto &row_link_data : subplot->RowLinkData) {
 			if (row_link_data.Min == 0 && row_link_data.Max == 1) {
-				row_link_data.Min = data_min;
-				row_link_data.Max = data_max;
+				const auto padding_percent = ImPlot::GetStyle().FitPadding.y;
+				const auto full_range = data_max - data_min;
+				const auto padding = full_range * static_cast<double>(padding_percent);
+				
+				row_link_data.Min = data_min - padding;
+				row_link_data.Max = data_max + padding;
 			}
 		}
 	}
