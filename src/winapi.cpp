@@ -8,6 +8,24 @@
 #include <string>
 #include <vector>
 
+#ifdef __linux__
+auto executeCmd(const std::vector<std::string> &argsVector) -> void {
+	std::vector<char *> cArgsVector;
+
+	for (const auto &str : argsVector) {
+		cArgsVector.push_back(const_cast<char *>(str.c_str()));
+	}
+
+	cArgsVector.push_back(nullptr);
+
+	if (fork() == 0) {
+		execvp(cArgsVector[0], &cArgsVector[0]);
+		spdlog::error("execvp() failed: {}", strerror(errno));
+		exit(EXIT_FAILURE);
+	}
+}
+#endif
+
 auto isLightTheme() -> bool {
 #ifdef _WIN32
 	// based on
@@ -53,6 +71,8 @@ auto openWebpage(std::string url) -> void {
 
 #if defined(_WIN32)
 	ShellExecuteA(nullptr, "open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+#elif defined(__linux__)
+	executeCmd({"xdg-open", url});
 #else
 #warning "Unknown OS, can't open webpages"
 #endif
