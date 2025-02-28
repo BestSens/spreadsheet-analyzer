@@ -101,3 +101,27 @@ target_link_libraries(spreadsheet_analyzer PRIVATE
 	roboto_mono
 )
 target_include_directories(spreadsheet_analyzer PRIVATE ${OPENGL_INCLUDE_DIR})
+
+if (CMAKE_CXX_COMPILER_ID MATCHES "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 15)
+	target_include_directories(spreadsheet_analyzer PRIVATE
+		${CMAKE_CURRENT_BINARY_DIR}
+	)
+
+	add_custom_command(
+		OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/2025_02_ICON_shade.png.h
+		COMMAND xxd -n icon_data -i ${CMAKE_CURRENT_SOURCE_DIR}/assets/2025_02_ICON_shade.png > ${CMAKE_CURRENT_BINARY_DIR}/2025_02_ICON_shade.png.h
+		DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/assets/2025_02_ICON_shade.png
+	)
+
+	add_custom_command(
+		OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/logo_4c.png.h
+		COMMAND xxd -n logo_data -i ${CMAKE_CURRENT_SOURCE_DIR}/assets/logo_4c.png > ${CMAKE_CURRENT_BINARY_DIR}/logo_4c.png.h
+		DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/assets/logo_4c.png
+	)
+
+	add_custom_target(generate_headers ALL
+		DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/2025_02_ICON_shade.png.h ${CMAKE_CURRENT_BINARY_DIR}/logo_4c.png.h
+	)
+
+	add_dependencies(spreadsheet_analyzer generate_headers)
+endif()

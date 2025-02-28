@@ -17,8 +17,8 @@ const unsigned char logo_data[] = {
 #embed "../assets/logo_4c.png"
 };
 #else
-const unsigned char* icon_data = NULL;
-const unsigned char* logo_data = NULL;
+#include "2025_02_ICON_shade.png.h"
+#include "logo_4c.png.h"
 #endif
 
 #if defined(__clang__)
