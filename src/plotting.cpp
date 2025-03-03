@@ -138,20 +138,26 @@ namespace {
 			}
 		}
 	}
+
+	auto getPlotSize() -> ImVec2 {
+		auto v_min = ImGui::GetWindowContentRegionMin();
+		auto v_max = ImGui::GetWindowContentRegionMax();
+
+		v_min.x += ImGui::GetWindowPos().x;
+		v_min.y += ImGui::GetWindowPos().y;
+		v_max.x += ImGui::GetWindowPos().x;
+		v_max.y += ImGui::GetWindowPos().y;
+
+		const auto plot_height = v_max.y - v_min.y - 5.0f;
+		const auto plot_width = v_max.x - v_min.x;
+
+		return {plot_width, plot_height};
+	}
 }  // namespace
 
 auto plotDataInSubplots(const std::vector<data_dict_t> &data, size_t max_data_points, const std::string &uuid,
 						bool global_x_link) -> void {
-	auto v_min = ImGui::GetWindowContentRegionMin();
-	auto v_max = ImGui::GetWindowContentRegionMax();
-
-	v_min.x += ImGui::GetWindowPos().x;
-	v_min.y += ImGui::GetWindowPos().y;
-	v_max.x += ImGui::GetWindowPos().x;
-	v_max.y += ImGui::GetWindowPos().y;
-
-	const auto plot_height = v_max.y - v_min.y;
-	const auto plot_width = v_max.x - v_min.x;
+	const auto plot_size = getPlotSize();
 
 	max_data_points = std::max(max_data_points, 1uz);
 
@@ -175,14 +181,15 @@ auto plotDataInSubplots(const std::vector<data_dict_t> &data, size_t max_data_po
 
 	static auto [global_link_min, global_link_max] = getPaddedXLims(data);
 
-	if (ImPlot::BeginSubplots(subplot_id.c_str(), rows, cols, ImVec2(plot_width, plot_height), subplot_flags)) {
+	if (ImPlot::BeginSubplots(subplot_id.c_str(), rows, cols, plot_size, subplot_flags)) {
 		if (!global_x_link) {
 			fixSubplotRanges(data);
 		}
 
 		const auto* current_subplot = ImPlot::GetCurrentContext()->CurrentSubplot;
 		const auto current_flags = current_subplot->Flags;
-		const auto is_x_linked = global_x_link || (current_flags & ImPlotSubplotFlags_LinkAllX) != 0;
+		const auto is_x_linked = global_x_link || (current_flags & ImPlotSubplotFlags_LinkAllX) != 0 ||
+								 (current_flags & ImPlotSubplotFlags_LinkCols) != 0;
 
 		for (int i = 0; const auto &col : data) {
 			if (!col.visible) {
@@ -194,7 +201,7 @@ auto plotDataInSubplots(const std::vector<data_dict_t> &data, size_t max_data_po
 			}
 
 			const auto plot_title = col.name + "##" + col.uuid;
-			if (ImPlot::BeginPlot(plot_title.c_str(), ImVec2(plot_width, plot_height),
+			if (ImPlot::BeginPlot(plot_title.c_str(), ImVec2(-1, 0),
 								  (n_selected < 1 ? ImPlotFlags_NoLegend : 0) | ImPlotFlags_NoTitle)) {
 				const auto fmt = [&col]() -> std::string {
 					if (col.unit.empty()) {

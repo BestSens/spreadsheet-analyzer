@@ -182,6 +182,12 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 		ImGui::StyleColorsDark();
 	}
 
+	ImPlot::CreateContext();
+	ImPlot::GetStyle().UseLocalTime = false;
+	ImPlot::GetStyle().UseISO8601 = true;
+	ImPlot::GetStyle().Use24HourClock = true;
+	ImPlot::GetStyle().FitPadding = ImVec2(0.025f, 0.1f);
+
 	// Setup Platform/Renderer backends
 	ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
     ImGui_ImplSDLRenderer3_Init(renderer);
@@ -302,9 +308,12 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 		const auto dockspace = ImGui::DockSpaceOverViewport(ImGui::GetID("DockSpace"), ImGui::GetMainViewport(),
 															ImGuiDockNodeFlags_PassthruCentralNode);
+		
+		if (show_debug_menu) {
+			ImPlot::ShowMetricsWindow();
+		}
 
 		for (auto &ctx : window_contexts) {
-			ImGui::PushID(ctx.getUUID().c_str());
 			ctx.checkForFinishedLoading();
 			auto &dict = ctx.getData();
 			auto window_open = ctx.getWindowOpenRef();
@@ -312,12 +321,6 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 			ImGui::SetNextWindowDockID(dockspace, ImGuiCond_Once);
 			ImGui::Begin(ctx.getWindowID().c_str(), &window_open,
 						 ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-
-			ImPlot::CreateContext();
-			ImPlot::GetStyle().UseLocalTime = false;
-			ImPlot::GetStyle().UseISO8601 = true;
-			ImPlot::GetStyle().Use24HourClock = true;
-			ImPlot::GetStyle().FitPadding = ImVec2(0.025f, 0.1f);
 
 			const auto loading_status = ctx.getLoadingStatus();
 
@@ -356,7 +359,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 										const auto stop = std::max(first_index, current_index);
 
 										std::for_each(dict.begin() + start, dict.begin() + stop + 1,
-													 [](auto &tmp) { tmp.visible = true; });
+													  [](auto &tmp) { tmp.visible = true; });
 									}
 
 									break;
@@ -387,8 +390,6 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 			if (!window_open) {
 				ctx.scheduleForDeletion();
 			}
-
-			ImGui::PopID();
 		}
 
 		window_contexts.erase(std::remove_if(window_contexts.begin(), window_contexts.end(),
