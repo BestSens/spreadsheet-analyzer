@@ -18,6 +18,7 @@
 #include "backends/imgui_impl_sdlrenderer3.h"
 #include "cxxopts.hpp"
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "imgui_stdlib.h"
 #include "implot.h"
 #include "spdlog/spdlog.h"
@@ -388,6 +389,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 			ImGui::End();
 
 			if (!window_open) {
+				ImGui::ClearWindowSettings(ctx.getWindowID().c_str());
 				ctx.scheduleForDeletion();
 			}
 		}
