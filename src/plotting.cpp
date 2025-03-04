@@ -155,7 +155,15 @@ namespace {
 		return {plot_width, plot_height};
 	}
 
-	auto doPlot(int current_pos, int n_selected, const data_dict_t &col, const ImVec4 &plot_color) -> void {
+	auto getCursorColor() -> ImVec4 {
+		auto temp = ImGui::GetStyle().Colors[ImGuiCol_Text];
+		temp.w = 0.25f;
+
+		return temp;
+	}
+
+	auto doPlot(int current_pos, int n_selected, int col_count, const data_dict_t &col, const ImVec4 &plot_color)
+		-> void {
 		auto &app_state = AppState::getInstance();
 		const auto max_data_points = static_cast<size_t>(std::max(app_state.max_data_points, 1));
 		const auto global_x_link = app_state.global_x_link;
@@ -171,12 +179,7 @@ namespace {
 			ImPlot::SetNextAxisLinks(ImAxis_X1, &global_link_min, &global_link_max);
 		}
 
-		const auto cursor_color = []() -> ImVec4 {
-			auto temp = ImGui::GetStyle().Colors[ImGuiCol_Text];
-			temp.w = 0.25f;
-	
-			return temp;
-		}();
+		const auto cursor_color = getCursorColor();
 
 		const auto plot_title = col.name + "##" + col.uuid;
 		const auto inf_line_name = "##" + col.uuid + "inf_line";
@@ -195,7 +198,7 @@ namespace {
 			}();
 
 			const auto show_x_axis = [&]() -> bool {
-				if (current_pos == n_selected - 1) {
+				if (current_pos >= n_selected - col_count) {
 					return true;
 				}
 
@@ -305,7 +308,7 @@ auto plotDataInSubplots(const std::vector<data_dict_t> &data, const std::string 
 		}
 
 		for (int i = 0; const auto &col : data | std::views::filter(data_filter)) {
-			doPlot(i, n_selected, col, color_map[coerceCast<size_t>(i) % color_map.size()]);
+			doPlot(i, n_selected, cols, col, color_map[coerceCast<size_t>(i) % color_map.size()]);
 			++i;
 		}
 
