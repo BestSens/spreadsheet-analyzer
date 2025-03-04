@@ -306,6 +306,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 			ImGui::Begin(ctx.getWindowID().c_str(), &window_open,
 						 ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
 
+			const auto window_content_size = ImGui::GetContentRegionAvail();
 			const auto loading_status = ctx.getLoadingStatus();
 
 			if (loading_status.is_loading) {
@@ -313,11 +314,13 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 									  static_cast<float>(loading_status.required_files);
 				const auto label = fmt::format("{:.0f}% ({}/{})", progress * 100.0f, loading_status.finished_files,
 											   loading_status.required_files);
-				ImGui::ProgressBar(progress, ImVec2(ImGui::GetWindowSize().x - 20, 20), label.c_str());
+
+				const auto padding = std::min(100.0f, window_content_size.x / 10.0f);
+				ImGui::SetCursorPosX(ImGui::GetCursorPosX() + padding);
+				ImGui::SetCursorPosY(ImGui::GetCursorPosY() + window_content_size.y / 2.0f - 10.0f);
+				ImGui::ProgressBar(progress, ImVec2(window_content_size.x - 2.0f * padding, 20.0f), label.c_str());
 			} else {
 				if (!dict.empty()) {
-					const auto window_content_size = ImGuiExt::getContentSize();
-
 					ImGui::BeginChild("Column List", ImVec2(250, window_content_size.y));
 					if (ImGui::BeginListBox("List Box", ImVec2(window_content_size.x, window_content_size.y))) {
 						for (auto &dct : dict) {

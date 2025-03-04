@@ -245,7 +245,7 @@ namespace {
 }  // namespace
 
 auto plotDataInSubplots(const std::vector<data_dict_t> &data, const std::string &uuid) -> void {
-	const auto plot_size = ImGuiExt::getContentSize();
+	const auto plot_size = ImGui::GetContentRegionAvail();
 
 	static auto data_filter = [](const auto &dct) { return dct.visible; };
 

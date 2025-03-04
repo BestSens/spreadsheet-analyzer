@@ -91,20 +91,5 @@ namespace ImGuiExt {
 	auto EndSubWindow() -> void {
 		ImGui::EndChild();
 	}
-
-	auto getContentSize() -> ImVec2 {
-		auto v_min = ImGui::GetWindowContentRegionMin();
-		auto v_max = ImGui::GetWindowContentRegionMax();
-
-		v_min.x += ImGui::GetWindowPos().x;
-		v_min.y += ImGui::GetWindowPos().y;
-		v_max.x += ImGui::GetWindowPos().x;
-		v_max.y += ImGui::GetWindowPos().y;
-
-		const auto height = v_max.y - v_min.y;
-		const auto width = v_max.x - v_min.x;
-
-		return {width, height};
-	}
 	// NOLINTEND(readability-identifier-naming)
 }  // namespace ImGuiExt

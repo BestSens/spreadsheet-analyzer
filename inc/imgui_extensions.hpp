@@ -50,7 +50,5 @@ namespace ImGuiExt {
         ImGuiExt::TextFormatted(fmt, std::forward<decltype(args)>(args)...);
         ImGui::PopStyleColor();
     }
-
-	auto getContentSize() -> ImVec2;
 	// NOLINTEND(readability-identifier-naming)
 }  // namespace ImGuiExt
