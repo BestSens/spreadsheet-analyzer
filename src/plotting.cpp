@@ -10,6 +10,7 @@
 #include "dicts.hpp"
 #include "global_state.hpp"
 #include "imgui.h"
+#include "imgui_extensions.hpp"
 #include "implot.h"
 #include "implot_internal.h"
 #include "spdlog/spdlog.h"
@@ -140,21 +141,6 @@ namespace {
 		}
 	}
 
-	auto getPlotSize() -> ImVec2 {
-		auto v_min = ImGui::GetWindowContentRegionMin();
-		auto v_max = ImGui::GetWindowContentRegionMax();
-
-		v_min.x += ImGui::GetWindowPos().x;
-		v_min.y += ImGui::GetWindowPos().y;
-		v_max.x += ImGui::GetWindowPos().x;
-		v_max.y += ImGui::GetWindowPos().y;
-
-		const auto plot_height = v_max.y - v_min.y - 5.0f;
-		const auto plot_width = v_max.x - v_min.x;
-
-		return {plot_width, plot_height};
-	}
-
 	auto getCursorColor() -> ImVec4 {
 		auto temp = ImGui::GetStyle().Colors[ImGuiCol_Text];
 		temp.w = 0.25f;
@@ -257,7 +243,7 @@ namespace {
 }  // namespace
 
 auto plotDataInSubplots(const std::vector<data_dict_t> &data, const std::string &uuid) -> void {
-	const auto plot_size = getPlotSize();
+	const auto plot_size = ImGuiExt::getContentSize();
 
 	static auto data_filter = [](const auto &dct) { return dct.visible; };
 

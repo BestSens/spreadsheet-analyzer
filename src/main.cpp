@@ -30,6 +30,7 @@
 #include "file_dialog.hpp"
 #include "fonts.hpp"
 #include "global_state.hpp"
+#include "imgui_extensions.hpp"
 #include "plotting.hpp"
 #include "winapi.hpp"
 #include "window_context.hpp"
@@ -315,12 +316,10 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 				ImGui::ProgressBar(progress, ImVec2(ImGui::GetWindowSize().x - 20, 20), label.c_str());
 			} else {
 				if (!dict.empty()) {
-					const auto window_size = ImGui::GetWindowSize();
+					const auto window_content_size = ImGuiExt::getContentSize();
 
-					ImGui::BeginChild("Column List", ImVec2(250, window_size.y - 20));
-					const auto col_list_size = ImGui::GetWindowSize();
-
-					if (ImGui::BeginListBox("List Box", ImVec2(col_list_size.x, col_list_size.y))) {
+					ImGui::BeginChild("Column List", ImVec2(250, window_content_size.y));
+					if (ImGui::BeginListBox("List Box", ImVec2(window_content_size.x, window_content_size.y))) {
 						for (auto &dct : dict) {
 							if (ImGui::Selectable(dct.name.c_str(), &dct.visible)) {
 								if (app_state.is_ctrl_pressed) {
@@ -359,7 +358,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 					ImGui::SameLine();
 
-					ImGui::BeginChild("File content", ImVec2(window_size.x - 255, window_size.y - 20));
+					ImGui::BeginChild("File content", ImVec2(window_content_size.x - 255, window_content_size.y));
 					ImGui::PushFont(getFont(fontList::ROBOTO_MONO_16));
 					
 					ctx.switchToImPlotContext();
