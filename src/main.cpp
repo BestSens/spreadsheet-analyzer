@@ -58,6 +58,36 @@ namespace {
 
 		std::exit(EXIT_FAILURE);  // NOLINT(concurrency-mt-unsafe)
 	}
+
+	auto updateDateRange(const auto &window_contexts) -> void {
+		double date_min = std::numeric_limits<double>::max();
+		double date_max = std::numeric_limits<double>::lowest();
+		
+		for (const auto& window_context : window_contexts) {
+			const auto& data = window_context.getData();
+
+			if (data.empty()) {
+				continue;
+			}
+
+			for (const auto &e : window_context.getData()) {
+				if (!e.visible) {
+					continue;
+				}
+
+				if (e.timestamp.empty()) {
+					continue;
+				}
+
+				date_min = std::min(date_min, static_cast<double>(e.timestamp.front()));
+				date_max = std::max(date_max, static_cast<double>(e.timestamp.back()));
+			}
+		}
+
+		if (date_min != std::numeric_limits<double>::max() && date_max != std::numeric_limits<double>::lowest()) {
+			AppState::getInstance().date_range = {date_min, date_max};
+		}
+	}
 }  // namespace
 
 #if defined(_WIN32)
@@ -296,6 +326,8 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 		if (app_state.show_debug_menu) {
 			ImGui::ShowMetricsWindow();
 		}
+
+		updateDateRange(window_contexts);
 
 		for (auto &ctx : window_contexts) {
 			ctx.checkForFinishedLoading();

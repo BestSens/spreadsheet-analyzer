@@ -1,6 +1,7 @@
 #pragma once
 
 #include <limits>
+#include <utility>
 
 #include "SDL3/SDL.h"
 
@@ -20,9 +21,12 @@ public:
 	// NOLINTBEGIN(misc-non-private-member-variables-in-classes)
 	int max_data_points{10'000};
 
-	double global_link_min{std::numeric_limits<double>::quiet_NaN()};
-	double global_link_max{std::numeric_limits<double>::quiet_NaN()};
+	std::pair<double, double> global_link{std::numeric_limits<double>::quiet_NaN(),
+										  std::numeric_limits<double>::quiet_NaN()};
+	std::pair<double, double> date_range{std::numeric_limits<double>::quiet_NaN(),
+										 std::numeric_limits<double>::quiet_NaN()};
 	double global_x_mouse_position{std::numeric_limits<double>::quiet_NaN()};
+
 	bool global_x_link{false};
 	bool always_show_cursor{true};
 	

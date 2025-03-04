@@ -22,6 +22,8 @@ namespace {
 		size_t reduction_factor;
 		size_t start_index;
 		int count;
+
+		std::pair<double, double> linked_date_range;
 	};
 
 	auto plotDict(int i, void *data) -> ImPlotPoint {
@@ -32,11 +34,11 @@ namespace {
 		const auto &dd = *plot_data.data;
 
 		if (i == 0) {
-			return {static_cast<double>(dd.timestamp.front()), std::numeric_limits<double>::quiet_NaN()};
+			return {plot_data.linked_date_range.first, std::numeric_limits<double>::quiet_NaN()};
 		}
 
 		if (i == plot_data.count - 1) {
-			return {static_cast<double>(dd.timestamp.back()), std::numeric_limits<double>::quiet_NaN()};
+			return {plot_data.linked_date_range.second, std::numeric_limits<double>::quiet_NaN()};
 		}
 
 		const auto index = plot_data.start_index + (static_cast<size_t>(i - 1) * plot_data.reduction_factor);
@@ -148,13 +150,13 @@ namespace {
 		return temp;
 	}
 
-	auto doPlot(int current_pos, int n_selected, int col_count, const data_dict_t &col, const ImVec4 &plot_color)
-		-> void {
+	auto doPlot(int current_pos, int n_selected, int col_count, const data_dict_t &col, const ImVec4 &plot_color,
+				const std::pair<double, double> &window_date_range) -> void {
 		auto &app_state = AppState::getInstance();
 		const auto max_data_points = static_cast<size_t>(std::max(app_state.max_data_points, 1));
 		const auto global_x_link = app_state.global_x_link;
-		double &global_link_min = app_state.global_link_min;
-		double &global_link_max = app_state.global_link_max;
+		double &global_link_min = app_state.global_link.first;
+		double &global_link_max = app_state.global_link.second;
 
 		const auto *current_subplot = ImPlot::GetCurrentContext()->CurrentSubplot;
 		const auto current_flags = current_subplot->Flags;
@@ -220,9 +222,24 @@ namespace {
 			const auto reduction_factor =
 				std::clamp(fastCeil<size_t>(points_in_range, max_data_points), 1uz, std::numeric_limits<size_t>::max());
 
+			const auto date_lims = [&]() {
+				if (is_x_linked) {
+					if (global_x_link) {
+						return app_state.date_range;
+					}
+
+					return window_date_range;
+				}
+
+				return getDateRange(col);
+			}();
+
 			const auto count = coerceCast<int>(fastCeil(points_in_range, reduction_factor)) + 2;
-			plot_data_t plot_data{
-				.data = &col, .reduction_factor = reduction_factor, .start_index = start_index, .count = count};
+			plot_data_t plot_data{.data = &col,
+								  .reduction_factor = reduction_factor,
+								  .start_index = start_index,
+								  .count = count,
+								  .linked_date_range = date_lims};
 
 			if (ImPlot::IsPlotHovered()) {
 				app_state.global_x_mouse_position =
@@ -267,11 +284,8 @@ auto plotDataInSubplots(const std::vector<data_dict_t> &data, const std::string 
 	auto& app_state = AppState::getInstance();
 	const auto global_x_link = app_state.global_x_link;
 
-	if (global_x_link && (std::isnan(app_state.global_link_min) || std::isnan(app_state.global_link_max))) {
-		const auto [global_link_min, global_link_max] = getPaddedXLims(data);
-
-		app_state.global_link_min = global_link_min;
-		app_state.global_link_max = global_link_max;
+	if (global_x_link && (std::isnan(app_state.global_link.first) || std::isnan(app_state.global_link.second))) {
+		app_state.global_link = getPaddedXLims(data);
 	}
 
 	const auto subplot_id = "##" + uuid;
@@ -295,8 +309,10 @@ auto plotDataInSubplots(const std::vector<data_dict_t> &data, const std::string 
 			fixSubplotRanges(data);
 		}
 
+		const auto window_date_range = getXLims(data);
+
 		for (int i = 0; const auto &col : data | std::views::filter(data_filter)) {
-			doPlot(i, n_selected, cols, col, color_map[coerceCast<size_t>(i) % color_map.size()]);
+			doPlot(i, n_selected, cols, col, color_map[coerceCast<size_t>(i) % color_map.size()], window_date_range);
 			++i;
 		}
 
