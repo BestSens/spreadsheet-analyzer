@@ -22,7 +22,10 @@ public:
 
 	double global_link_min{std::numeric_limits<double>::quiet_NaN()};
 	double global_link_max{std::numeric_limits<double>::quiet_NaN()};
+	double global_x_mouse_position{std::numeric_limits<double>::quiet_NaN()};
 	bool global_x_link{false};
+	bool always_show_cursor{true};
+	
 	bool is_ctrl_pressed{false};
 	bool is_shift_pressed{false};
 	bool show_about{false};

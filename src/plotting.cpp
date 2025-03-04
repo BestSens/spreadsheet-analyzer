@@ -171,7 +171,15 @@ namespace {
 			ImPlot::SetNextAxisLinks(ImAxis_X1, &global_link_min, &global_link_max);
 		}
 
+		const auto cursor_color = []() -> ImVec4 {
+			auto temp = ImGui::GetStyle().Colors[ImGuiCol_Text];
+			temp.w = 0.25f;
+	
+			return temp;
+		}();
+
 		const auto plot_title = col.name + "##" + col.uuid;
+		const auto inf_line_name = "##" + col.uuid + "inf_line";
 		if (ImPlot::BeginPlot(plot_title.c_str(), ImVec2(-1, 0),
 							  (n_selected < 1 ? ImPlotFlags_NoLegend : 0) | ImPlotFlags_NoTitle)) {
 			const auto fmt = [&col]() -> std::string {
@@ -227,7 +235,18 @@ namespace {
 			plot_data_t plot_data{
 				.data = &col, .reduction_factor = reduction_factor, .start_index = start_index, .count = count};
 
+			if (ImPlot::IsPlotHovered()) {
+				app_state.global_x_mouse_position =
+					ImPlot::GetCurrentPlot()->XAxis(0).PixelsToPlot(ImGui::GetIO().MousePos.x);
+			}
+
 			ImPlot::PlotLineG(col.name.c_str(), plotDict, &plot_data, count);
+			
+			if (app_state.always_show_cursor || app_state.is_ctrl_pressed) {
+				ImPlot::SetNextLineStyle(cursor_color, 2.0f);
+				ImPlot::PlotInfLines(inf_line_name.c_str(), &app_state.global_x_mouse_position, 1);
+			}
+
 			ImPlot::EndPlot();
 		}
 	}

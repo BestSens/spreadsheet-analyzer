@@ -258,6 +258,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 			if (ImGui::BeginMenu("Settings")) {
 				ImGui::MenuItem("Link x-axes globally", nullptr, &app_state.global_x_link);
+				ImGui::MenuItem("Always show date cursor", nullptr, &app_state.always_show_cursor);
 				ImGui::EndMenu();
 			}
 
