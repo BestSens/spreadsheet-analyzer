@@ -21,9 +21,9 @@ public:
 	WindowContext() = default;
 	explicit WindowContext(std::vector<data_dict_t> new_data) : data{std::move(new_data)} {}
 
-	WindowContext(const std::vector<std::filesystem::path> &paths, function_signature loading_fn) {
+	WindowContext(const std::vector<std::filesystem::path> &paths, const function_signature& loading_fn) {
 		spdlog::debug("Creating window context with UUID: {}", this->getUUID());
-		this->loadFiles(paths, std::move(loading_fn));
+		this->loadFiles(paths, loading_fn);
 	}
 
 	~WindowContext() {
@@ -104,7 +104,7 @@ public:
 		this->scheduled_for_deletion = true;
 	}
 
-	auto loadFiles(const std::vector<std::filesystem::path> &paths, function_signature fn) -> void {
+	auto loadFiles(const std::vector<std::filesystem::path> &paths, const function_signature &fn) -> void {
 		if (paths.empty()) {
 			return;
 		}

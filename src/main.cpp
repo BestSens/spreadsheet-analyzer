@@ -29,6 +29,7 @@
 #include "dicts.hpp"
 #include "file_dialog.hpp"
 #include "fonts.hpp"
+#include "global_state.hpp"
 #include "plotting.hpp"
 #include "winapi.hpp"
 #include "window_context.hpp"
@@ -38,9 +39,6 @@ extern "C" const size_t icon_data_size;
 
 extern "C" const unsigned char logo_data[];
 extern "C" const size_t logo_data_size;
-
-SDL_Surface *window_icon{nullptr};
-float display_scale{1.0f};
 
 namespace {
 	auto terminateHandler() -> void {
@@ -68,8 +66,8 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 	std::set_terminate(terminateHandler);
 
 	std::vector<std::filesystem::path> commandline_paths{};
-	int max_data_points{10'000};
-	bool show_debug_menu{false};
+
+	auto &app_state = AppState::getInstance();
 
 	{
 		cxxopts::Options options(argv[0], "Spreadsheet Analyzer");
@@ -97,7 +95,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 			if (result.count("verbose") == 1u) {
 				spdlog::set_level(spdlog::level::debug);
-				show_debug_menu = true;
+				app_state.show_debug_menu = true;
 				spdlog::info("verbose output enabled");
 			}
 		} catch (const std::exception& e) {
@@ -126,12 +124,12 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 	const SDL_WindowFlags window_flags =
 		SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | SDL_WINDOW_MAXIMIZED;
 	auto *window = SDL_CreateWindow("Spreadsheet Analyzer", 1280, 720, window_flags);
-	auto *renderer = SDL_CreateRenderer(window, nullptr);
-	SDL_SetRenderVSync(renderer, 1);
+	app_state.renderer = SDL_CreateRenderer(window, nullptr);
+	SDL_SetRenderVSync(app_state.renderer, 1);
 
 	// NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
-	window_icon = IMG_LoadPNG_IO(SDL_IOFromMem(const_cast<unsigned char*>(icon_data), icon_data_size));
-	SDL_SetWindowIcon(window, window_icon);
+	app_state.window_icon = IMG_LoadPNG_IO(SDL_IOFromMem(const_cast<unsigned char*>(icon_data), icon_data_size));
+	SDL_SetWindowIcon(window, app_state.window_icon);
 
 	SDL_ShowWindow(window);
 
@@ -143,7 +141,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 		auto *logo = IMG_LoadPNG_IO(SDL_IOFromMem(const_cast<unsigned char *>(logo_data), logo_data_size));
 
 		if (logo != nullptr) {
-			logo_texture = SDL_CreateTextureFromSurface(renderer, logo);
+			logo_texture = SDL_CreateTextureFromSurface(app_state.renderer, logo);
 			
 			if (logo_texture == nullptr) {
 				spdlog::error("Error: {}", SDL_GetError());
@@ -155,8 +153,8 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 		}
 	}
 
-	display_scale = SDL_GetWindowDisplayScale(window);
-	spdlog::debug("Display scale: {}x", display_scale);
+	app_state.display_scale = SDL_GetWindowDisplayScale(window);
+	spdlog::debug("Display scale: {}x", app_state.display_scale);
 
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
@@ -167,7 +165,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 	addFonts();
 
 	io.FontDefault = getFont(fontList::ROBOTO_SANS_16);
-	io.FontGlobalScale = display_scale;
+	io.FontGlobalScale = app_state.display_scale;
 
 	// Setup Dear ImGui style
 	try {
@@ -182,18 +180,14 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 	}
 
 	// Setup Platform/Renderer backends
-	ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
-    ImGui_ImplSDLRenderer3_Init(renderer);
+	ImGui_ImplSDL3_InitForSDLRenderer(window, app_state.renderer);
+    ImGui_ImplSDLRenderer3_Init(app_state.renderer);
 
 	const auto background_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
 	// Main loop
 	bool done{false};
-	bool is_ctrl_pressed{false};
-	bool is_shift_pressed{false};
-	bool show_about{false};
-	bool link_x_global{false};
-	
+
 	while (!done) {
 		bool open_selected{false};
 		bool select_folder{false};
@@ -221,28 +215,28 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 				}
 
 				if ((event.key.mod & SDL_KMOD_CTRL) != 0) {
-					is_ctrl_pressed = true;
+					app_state.is_ctrl_pressed = true;
 				}
 
 				if ((event.key.mod & SDL_KMOD_SHIFT) != 0) {
-					is_shift_pressed = true;
+					app_state.is_shift_pressed = true;
 				}
 			}
 
 			if (event.type == SDL_EVENT_KEY_UP) {
 				if ((event.key.mod & SDL_KMOD_CTRL) == 0) {
-					is_ctrl_pressed = false;
+					app_state.is_ctrl_pressed = false;
 				}
 
 				if ((event.key.mod & SDL_KMOD_SHIFT) == 0) {
-					is_shift_pressed = false;
+					app_state.is_shift_pressed = false;
 				}
 			}
 
 			if (event.type == SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED) {
-				display_scale = SDL_GetWindowDisplayScale(window);
-				io.FontGlobalScale = display_scale;
-				spdlog::debug("Display scale changed to {}x", display_scale);
+				app_state.display_scale = SDL_GetWindowDisplayScale(window);
+				io.FontGlobalScale = app_state.display_scale;
+				spdlog::debug("Display scale changed to {}x", app_state.display_scale);
 			}
 		}
 
@@ -263,18 +257,18 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 			}
 
 			if (ImGui::BeginMenu("Settings")) {
-				ImGui::MenuItem("Link x-axes globally", nullptr, &link_x_global);
+				ImGui::MenuItem("Link x-axes globally", nullptr, &app_state.global_x_link);
 				ImGui::EndMenu();
 			}
 
 			if (ImGui::BeginMenu("Help")) {
-				ImGui::MenuItem("About", nullptr, &show_about);
+				ImGui::MenuItem("About", nullptr, &app_state.show_about);
 				ImGui::EndMenu();
 			}
 
-			if (show_debug_menu) {
+			if (app_state.show_debug_menu) {
 				if (ImGui::BeginMenu("Debug")) {
-					ImGui::InputInt("Max data points", &max_data_points);
+					ImGui::InputInt("Max data points", &app_state.max_data_points);
 					ImGui::Separator();
 					const auto fps_str = fmt::format("{:.3f} ms/frame ({:.1f} FPS)", 1000.0f / ImGui::GetIO().Framerate,
 													ImGui::GetIO().Framerate);
@@ -296,11 +290,10 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 			}
 		}
 
-		showAboutScreen(show_about, renderer);
+		showAboutScreen();
 
 		const auto dockspace = ImGui::DockSpaceOverViewport(ImGui::GetID("DockSpace"), ImGui::GetMainViewport(),
 															ImGuiDockNodeFlags_PassthruCentralNode);
-		
 
 		for (auto &ctx : window_contexts) {
 			ctx.checkForFinishedLoading();
@@ -329,11 +322,11 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 					if (ImGui::BeginListBox("List Box", ImVec2(col_list_size.x, col_list_size.y))) {
 						for (auto &dct : dict) {
 							if (ImGui::Selectable(dct.name.c_str(), &dct.visible)) {
-								if (is_ctrl_pressed) {
+								if (app_state.is_ctrl_pressed) {
 									break;
 								}
 
-								if (is_shift_pressed) {
+								if (app_state.is_shift_pressed) {
 									const auto first_visible = std::find_if(
 										dict.begin(), dict.end(), [](const auto &tmp) { return tmp.visible; });
 
@@ -367,10 +360,11 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 					ImGui::BeginChild("File content", ImVec2(window_size.x - 255, window_size.y - 20));
 					ImGui::PushFont(getFont(fontList::ROBOTO_MONO_16));
-					ctx.switchToImPlotContext();
-					plotDataInSubplots(dict, coerceCast<size_t>(max_data_points), ctx.getUUID(), link_x_global);
 					
-					if (show_debug_menu) {
+					ctx.switchToImPlotContext();
+					plotDataInSubplots(dict, ctx.getUUID());
+					
+					if (app_state.show_debug_menu) {
 						ImGui::PushID(ctx.getUUID().c_str());
 						ImPlot::ShowMetricsWindow();
 						ImGui::PopID();
@@ -396,23 +390,23 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 							  window_contexts.end());
 
 		ImGui::Render();
-		SDL_SetRenderDrawColorFloat(renderer, background_color.x, background_color.y, background_color.z,
+		SDL_SetRenderDrawColorFloat(app_state.renderer, background_color.x, background_color.y, background_color.z,
 									background_color.w);
-		SDL_RenderClear(renderer);
+		SDL_RenderClear(app_state.renderer);
 
 		const SDL_FRect texture_rect{
-			.x = io.DisplaySize.x - (logo_size.x * display_scale) - (30.0f * display_scale),
-			.y = io.DisplaySize.y - (logo_size.y * display_scale) - (30.0f * display_scale),
-			.w = logo_size.x * display_scale,
-			.h = logo_size.y * display_scale
+			.x = io.DisplaySize.x - (logo_size.x * app_state.display_scale) - (30.0f * app_state.display_scale),
+			.y = io.DisplaySize.y - (logo_size.y * app_state.display_scale) - (30.0f * app_state.display_scale),
+			.w = logo_size.x * app_state.display_scale,
+			.h = logo_size.y * app_state.display_scale
 		};
 
 		if (logo_texture != nullptr) {
-			SDL_RenderTexture(renderer, logo_texture, nullptr, &texture_rect); 
+			SDL_RenderTexture(app_state.renderer, logo_texture, nullptr, &texture_rect); 
 		}
 
-        ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), renderer);
-        SDL_RenderPresent(renderer);
+        ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), app_state.renderer);
+        SDL_RenderPresent(app_state.renderer);
 	}
 
 	// Cleanup
@@ -420,7 +414,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 	ImGui_ImplSDL3_Shutdown();
 	ImGui::DestroyContext();
 
-	SDL_DestroyRenderer(renderer);
+	SDL_DestroyRenderer(app_state.renderer);
 	SDL_DestroyWindow(window);
 	SDL_Quit();
 

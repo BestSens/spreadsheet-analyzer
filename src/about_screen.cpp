@@ -5,14 +5,12 @@
 #include "SDL3/SDL.h"
 #include "fmt/format.h"
 #include "fonts.hpp"
+#include "global_state.hpp"
 #include "imgui.h"
 #include "imgui_extensions.hpp"
 #include "imgui_internal.h"
 #include "version.hpp"
 #include "winapi.hpp"
-
-extern SDL_Surface* window_icon;  //NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
-extern float display_scale;
 
 namespace {
 	struct Library {
@@ -37,10 +35,13 @@ namespace {
 	};
 }
 
-auto showAboutScreen(bool& show_about, SDL_Renderer* renderer) -> void {
-	if (!show_about) {
+auto showAboutScreen() -> void {
+	auto &app_state = AppState::getInstance();
+	if (!app_state.show_about) {
 		return;
 	}
+
+	const auto display_scale = app_state.display_scale;
 
 	const auto viewport_size = ImGui::GetIO().DisplaySize;
 	const auto window_size = ImVec2{500 * display_scale, 700 * display_scale};
@@ -48,7 +49,7 @@ auto showAboutScreen(bool& show_about, SDL_Renderer* renderer) -> void {
 	
 	ImGui::SetNextWindowSize(window_size, ImGuiCond_FirstUseEver);
 	ImGui::SetNextWindowPos(window_pos, ImGuiCond_FirstUseEver);
-	ImGui::Begin("About", &show_about,
+	ImGui::Begin("About", &app_state.show_about,
 				 ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_Modal);
 
 	ImGui::Spacing();
@@ -58,12 +59,12 @@ auto showAboutScreen(bool& show_about, SDL_Renderer* renderer) -> void {
 	ImGui::PopFont();
 	ImGuiExt::TextUnformattedCentered("Copyright © 2024 BestSens AG");
 
-	if (window_icon != nullptr) {
+	if (app_state.window_icon != nullptr) {
 		static ImTextureID icon_texture;
 		static bool initialized = false;
 
 		if (!initialized) {
-			const auto* texture = SDL_CreateTextureFromSurface(renderer, window_icon);
+			const auto* texture = SDL_CreateTextureFromSurface(app_state.renderer, app_state.window_icon);
 			if (texture != nullptr) {
 				// NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
 				icon_texture = reinterpret_cast<ImTextureID>(texture);

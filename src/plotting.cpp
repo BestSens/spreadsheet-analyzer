@@ -8,6 +8,7 @@
 
 #include "custom_type_traits.hpp"
 #include "dicts.hpp"
+#include "global_state.hpp"
 #include "imgui.h"
 #include "implot.h"
 #include "implot_internal.h"
@@ -153,15 +154,92 @@ namespace {
 
 		return {plot_width, plot_height};
 	}
+
+	auto doPlot(int current_pos, int n_selected, const data_dict_t &col) -> void {
+		auto &app_state = AppState::getInstance();
+		const auto max_data_points = static_cast<size_t>(std::max(app_state.max_data_points, 1));
+		const auto global_x_link = app_state.global_x_link;
+		double &global_link_min = app_state.global_link_min;
+		double &global_link_max = app_state.global_link_max;
+
+		const auto *current_subplot = ImPlot::GetCurrentContext()->CurrentSubplot;
+		const auto current_flags = current_subplot->Flags;
+		const auto is_x_linked = global_x_link || (current_flags & ImPlotSubplotFlags_LinkAllX) != 0 ||
+								 (current_flags & ImPlotSubplotFlags_LinkCols) != 0;
+
+		if (global_x_link) {
+			ImPlot::SetNextAxisLinks(ImAxis_X1, &global_link_min, &global_link_max);
+		}
+
+		const auto plot_title = col.name + "##" + col.uuid;
+		if (ImPlot::BeginPlot(plot_title.c_str(), ImVec2(-1, 0),
+							  (n_selected < 1 ? ImPlotFlags_NoLegend : 0) | ImPlotFlags_NoTitle)) {
+			const auto fmt = [&col]() -> std::string {
+				if (col.unit.empty()) {
+					return "%g";
+				}
+
+				if (col.unit == "%") {
+					return "%g%%";
+				}
+
+				return "%g " + col.unit;
+			}();
+
+			const auto show_x_axis = [&]() -> bool {
+				if (current_pos == n_selected - 1) {
+					return true;
+				}
+
+				return (!is_x_linked && !global_x_link);
+			}();
+
+			const auto x_axis_flags = (!show_x_axis ? ImPlotAxisFlags_NoTickLabels : 0) | ImPlotAxisFlags_NoLabel;
+
+			ImPlot::SetupAxes("date", col.name.c_str(), x_axis_flags);
+			ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Time);
+			ImPlot::SetupAxisFormat(ImAxis_Y1, fmt.c_str());
+
+			const auto date_range = [is_x_linked, global_x_link, current_subplot, &col, &global_link_min,
+									 &global_link_max]() {
+				if (is_x_linked) {
+					if (global_x_link) {
+						return std::pair{global_link_min, global_link_max};
+					}
+
+					const auto min = current_subplot->ColLinkData[0].Min;
+					const auto max = current_subplot->ColLinkData[0].Max;
+
+					return std::pair{min, max};
+				}
+
+				return getDateRange(col);
+			}();
+			ImPlot::SetupAxisLimits(ImAxis_X1, date_range.first, date_range.second, ImGuiCond_Once);
+
+			const auto limits = ImPlot::GetPlotLimits(ImAxis_X1);
+			const auto [start_index, stop_index] = getIndicesFromTimeRange(col.timestamp, limits.X);
+			const auto points_in_range = stop_index - start_index;
+			const auto reduction_factor =
+				std::clamp(fastCeil<size_t>(points_in_range, max_data_points), 1uz, std::numeric_limits<size_t>::max());
+
+			const auto count = coerceCast<int>(fastCeil(points_in_range, reduction_factor)) + 2;
+			plot_data_t plot_data{
+				.data = &col, .reduction_factor = reduction_factor, .start_index = start_index, .count = count};
+
+			ImPlot::PlotLineG(col.name.c_str(), plotDict, &plot_data, count);
+			ImPlot::EndPlot();
+		}
+	}
 }  // namespace
 
-auto plotDataInSubplots(const std::vector<data_dict_t> &data, size_t max_data_points, const std::string &uuid,
-						bool global_x_link) -> void {
+auto plotDataInSubplots(const std::vector<data_dict_t> &data, const std::string &uuid) -> void {
 	const auto plot_size = getPlotSize();
 
-	max_data_points = std::max(max_data_points, 1uz);
+	static auto data_filter = [](const auto &dct) { return dct.visible; };
 
-	const auto n_selected = std::count_if(data.begin(), data.end(), [](const auto &dct) { return dct.visible; });
+	const auto n_selected =
+		static_cast<int>(std::count_if(data.begin(), data.end(), data_filter));
 
 	if (n_selected == 0) {
 		return;
@@ -175,90 +253,28 @@ auto plotDataInSubplots(const std::vector<data_dict_t> &data, size_t max_data_po
 		return {(n_selected + 1) / 2, 2};
 	}();
 
+	auto& app_state = AppState::getInstance();
+	const auto global_x_link = app_state.global_x_link;
+
+	if (global_x_link && (std::isnan(app_state.global_link_min) || std::isnan(app_state.global_link_max))) {
+		const auto [global_link_min, global_link_max] = getPaddedXLims(data);
+
+		app_state.global_link_min = global_link_min;
+		app_state.global_link_max = global_link_max;
+	}
+
 	const auto subplot_id = "##" + uuid;
 	const auto subplot_flags =
 		(n_selected > 1 ? ImPlotSubplotFlags_ShareItems : 0) | (!global_x_link ? ImPlotSubplotFlags_LinkAllX : 0);
-
-	static auto [global_link_min, global_link_max] = getPaddedXLims(data);
 
 	if (ImPlot::BeginSubplots(subplot_id.c_str(), rows, cols, plot_size, subplot_flags)) {
 		if (!global_x_link) {
 			fixSubplotRanges(data);
 		}
 
-		const auto* current_subplot = ImPlot::GetCurrentContext()->CurrentSubplot;
-		const auto current_flags = current_subplot->Flags;
-		const auto is_x_linked = global_x_link || (current_flags & ImPlotSubplotFlags_LinkAllX) != 0 ||
-								 (current_flags & ImPlotSubplotFlags_LinkCols) != 0;
-
-		for (int i = 0; const auto &col : data) {
-			if (!col.visible) {
-				continue;
-			}
-
-			if (global_x_link) {
-				ImPlot::SetNextAxisLinks(ImAxis_X1, &global_link_min, &global_link_max);
-			}
-
-			const auto plot_title = col.name + "##" + col.uuid;
-			if (ImPlot::BeginPlot(plot_title.c_str(), ImVec2(-1, 0),
-								  (n_selected < 1 ? ImPlotFlags_NoLegend : 0) | ImPlotFlags_NoTitle)) {
-				const auto fmt = [&col]() -> std::string {
-					if (col.unit.empty()) {
-						return "%g";
-					}
-
-					if (col.unit == "%") {
-						return "%g%%";
-					}
-
-					return "%g " + col.unit;
-				}();
-
-				const auto show_x_axis = [&]() -> bool {
-					if (i == n_selected - 1) {
-						return true;
-					}
-
-					return (!is_x_linked && !global_x_link);
-				}();
-				++i;
-
-				const auto x_axis_flags = (!show_x_axis ? ImPlotAxisFlags_NoTickLabels : 0) | ImPlotAxisFlags_NoLabel;
-
-				ImPlot::SetupAxes("date", col.name.c_str(), x_axis_flags);
-				ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Time);
-				ImPlot::SetupAxisFormat(ImAxis_Y1, fmt.c_str());
-
-				const auto date_range = [is_x_linked, global_x_link, current_subplot, &col]() {
-					if (is_x_linked) {
-						if (global_x_link) {
-							return std::pair{global_link_min, global_link_max};
-						}
-
-						const auto min = current_subplot->ColLinkData[0].Min;
-						const auto max = current_subplot->ColLinkData[0].Max;
-
-						return std::pair{min, max};
-					}
-
-					return getDateRange(col);
-				}();
-				ImPlot::SetupAxisLimits(ImAxis_X1, date_range.first, date_range.second, ImGuiCond_Once);
-
-				const auto limits = ImPlot::GetPlotLimits(ImAxis_X1);
-				const auto [start_index, stop_index] = getIndicesFromTimeRange(col.timestamp, limits.X);
-				const auto points_in_range = stop_index - start_index;
-				const auto reduction_factor = std::clamp(fastCeil<size_t>(points_in_range, max_data_points), 1uz,
-														 std::numeric_limits<size_t>::max());
-
-				const auto count = coerceCast<int>(fastCeil(points_in_range, reduction_factor)) + 2;
-				plot_data_t plot_data{
-					.data = &col, .reduction_factor = reduction_factor, .start_index = start_index, .count = count};
-
-				ImPlot::PlotLineG(col.name.c_str(), plotDict, &plot_data, count);
-				ImPlot::EndPlot();
-			}
+		for (int i = 0; const auto &col : data | std::views::filter(data_filter)) {
+			doPlot(i, n_selected, col);
+			++i;
 		}
 
 		ImPlot::EndSubplots();
