@@ -231,8 +231,10 @@ namespace {
 			
 			ImPlot::SetNextLineStyle(plot_color);
 			ImPlot::PlotLineG(col.name.c_str(), plotDict, &plot_data, count);
-			
-			if (app_state.always_show_cursor || app_state.is_ctrl_pressed) {
+
+			if ((app_state.always_show_cursor || app_state.is_ctrl_pressed) &&
+				app_state.global_x_mouse_position >= static_cast<double>(col.timestamp.front()) &&
+				app_state.global_x_mouse_position <= static_cast<double>(col.timestamp.back())) {
 				ImPlot::SetNextLineStyle(cursor_color, 2.0f);
 				ImPlot::PlotInfLines(inf_line_name.c_str(), &app_state.global_x_mouse_position, 1);
 			}
