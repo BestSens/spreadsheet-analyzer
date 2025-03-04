@@ -183,12 +183,6 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 		ImGui::StyleColorsDark();
 	}
 
-	ImPlot::CreateContext();
-	ImPlot::GetStyle().UseLocalTime = false;
-	ImPlot::GetStyle().UseISO8601 = true;
-	ImPlot::GetStyle().Use24HourClock = true;
-	ImPlot::GetStyle().FitPadding = ImVec2(0.025f, 0.1f);
-
 	// Setup Platform/Renderer backends
 	ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
     ImGui_ImplSDLRenderer3_Init(renderer);
@@ -310,9 +304,6 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 		const auto dockspace = ImGui::DockSpaceOverViewport(ImGui::GetID("DockSpace"), ImGui::GetMainViewport(),
 															ImGuiDockNodeFlags_PassthruCentralNode);
 		
-		if (show_debug_menu) {
-			ImPlot::ShowMetricsWindow();
-		}
 
 		for (auto &ctx : window_contexts) {
 			ctx.checkForFinishedLoading();
@@ -378,7 +369,15 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 					ImGui::BeginChild("File content", ImVec2(window_size.x - 255, window_size.y - 20));
 					ImGui::PushFont(getFont(fontList::ROBOTO_MONO_16));
+					ctx.switchToImPlotContext();
 					plotDataInSubplots(dict, coerceCast<size_t>(max_data_points), ctx.getUUID(), link_x_global);
+					
+					if (show_debug_menu) {
+						ImGui::PushID(ctx.getUUID().c_str());
+						ImPlot::ShowMetricsWindow();
+						ImGui::PopID();
+					}
+
 					ImGui::PopFont();
 					ImGui::EndChild();
 				} else {
@@ -421,7 +420,6 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 	// Cleanup
 	ImGui_ImplSDLRenderer3_Shutdown();
 	ImGui_ImplSDL3_Shutdown();
-	ImPlot::DestroyContext();
 	ImGui::DestroyContext();
 
 	SDL_DestroyRenderer(renderer);

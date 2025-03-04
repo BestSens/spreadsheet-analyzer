@@ -7,9 +7,11 @@
 #include <string>
 #include <vector>
 
+#include "dicts.hpp"
+#include "implot.h"
 #include "spdlog/spdlog.h"
-#include "uuid_generator.hpp"
 #include "uuid.h"
+#include "uuid_generator.hpp"
 
 class WindowContext {
 public:
@@ -31,6 +33,10 @@ public:
 			this->data_dict_f.wait();
 		}
 		spdlog::debug("Window context with UUID: {} destroyed", this->getUUID());
+
+		if (this->implot_context != nullptr) {
+			ImPlot::DestroyContext(this->implot_context);
+		}
 	}
 
 	WindowContext(const WindowContext &) = delete;
@@ -39,14 +45,24 @@ public:
 	WindowContext(WindowContext &&other) noexcept
 		: data(std::move(other.data)),
 		  window_open(other.window_open),
-		  scheduled_for_deletion(other.scheduled_for_deletion) {}
+		  scheduled_for_deletion(other.scheduled_for_deletion) {
+		std::swap(this->implot_context, other.implot_context);
+		std::swap(this->finished_files, other.finished_files);
+		std::swap(this->stop_loading, other.stop_loading);
+		std::swap(this->data_dict_f, other.data_dict_f);
+		std::swap(this->required_files, other.required_files);
+		std::swap(this->window_title, other.window_title);
+		std::swap(this->uuid, other.uuid);
+		spdlog::debug("Moved window context with UUID: {}", this->getUUID());
+	}
 
 	auto operator=(WindowContext &&other) noexcept -> WindowContext & {
 		if (this != &other) {
 			this->data = std::move(other.data);
 			this->window_open = other.window_open;
 			this->scheduled_for_deletion = other.scheduled_for_deletion;
-			
+
+			std::swap(this->implot_context, other.implot_context);
 			std::swap(this->finished_files, other.finished_files);
 			std::swap(this->stop_loading, other.stop_loading);
 			std::swap(this->data_dict_f, other.data_dict_f);
@@ -139,7 +155,20 @@ public:
 		return uuids::to_string(this->uuid);
 	}
 
+	auto switchToImPlotContext() -> void {
+		if (this->implot_context == nullptr) {
+			this->implot_context = ImPlot::CreateContext();
+			ImPlot::SetCurrentContext(this->implot_context);
+			ImPlot::GetStyle().UseLocalTime = false;
+			ImPlot::GetStyle().UseISO8601 = true;
+			ImPlot::GetStyle().Use24HourClock = true;
+			ImPlot::GetStyle().FitPadding = ImVec2(0.025f, 0.1f);
+		} else {
+			ImPlot::SetCurrentContext(this->implot_context);
+		}
+	}
 private:
+	ImPlotContext *implot_context{nullptr};
 	std::vector<data_dict_t> data{};
 	bool window_open{true};
 	bool scheduled_for_deletion{false};
