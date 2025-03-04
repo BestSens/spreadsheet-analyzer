@@ -153,6 +153,10 @@ public:
 			.is_loading = is_loading, .finished_files = *this->finished_files, .required_files = this->required_files};
 	}
 
+	[[nodiscard]] auto getWindowTitle() const -> std::string {
+		return this->window_title;
+	}
+
 	[[nodiscard]] auto getWindowID() const -> std::string {
 		return window_title + "##" + this->getUUID();
 	}
