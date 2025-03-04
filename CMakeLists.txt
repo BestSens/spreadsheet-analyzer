@@ -46,7 +46,7 @@ target_include_directories(spreadsheet_analyzer PRIVATE
 
 target_compile_options(spreadsheet_analyzer PRIVATE
 	"$<$<CONFIG:RELEASE>:-O3;-DNDEBUG>"
-	"$<$<CONFIG:DEBUG>:-Og;-DDEBUG;-funwind-tables;-fno-inline>"
+	"$<$<CONFIG:DEBUG>:-Og;-DDEBUG;-funwind-tables;-fno-inline;-fno-omit-frame-pointer>"
 )
 
 find_package(Threads REQUIRED)
