@@ -108,12 +108,12 @@ namespace {
 		std::vector<bool> col_error_shown(col_names.size(), false);
 		size_t prefered_date_fmt = 0;
 
-		for (size_t line = 1; auto &row : reader) {
+		for (size_t line = 0; auto &row : reader) {
 			try {
 				const auto date_str = row[0].get<std::string>();
 				const auto date = parseDate(date_str, prefered_date_fmt);
 
-				for (size_t col = 2; const auto &col_name : col_names) {
+				for (size_t col = 0; const auto &col_name : col_names) {
 					try {
 						auto val = row[col_name].get<std::string>();
 
@@ -129,8 +129,8 @@ namespace {
 						}
 					} catch (const std::exception & e) {
 						if (!col_error_shown[col]) {
-							spdlog::warn("Error parsing column {} in file {}:{}: {}", col, path.filename().string(),
-										 line, e.what());
+							spdlog::warn("Error parsing column {} in file {}:{}: {}", col + 2, path.filename().string(),
+										 line + 1, e.what());
 							col_error_shown[col] = true;
 						}
 					}
@@ -143,7 +143,7 @@ namespace {
 				}
 			} catch (const std::exception &e) {
 				if (!line_error_shown) {
-					spdlog::warn("Error parsing line {}:{}: {}", path.filename().string(), line, e.what());
+					spdlog::warn("Error parsing line {}:{}: {}", path.filename().string(), line + 1, e.what());
 					line_error_shown = true;
 				}
 			}
