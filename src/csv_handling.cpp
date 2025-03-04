@@ -5,6 +5,7 @@
 #include <chrono>
 #include <execution>
 #include <filesystem>
+#include <iomanip>
 #include <ranges>
 #include <sstream>
 #include <stdexcept>
@@ -21,13 +22,38 @@
 #include "uuid_generator.hpp"
 
 namespace {
-	auto parseDate(const std::string &str) -> time_t {
+	const auto date_formats = std::array{
+		"%Y/%m/%d %H:%M:%S",
+		"%Y-%m-%d %H:%M:%S"
+	};
+
+	auto parseDate(const std::string &str, size_t &prefered_fmt) -> time_t {
 		static const auto locale = std::locale("de_DE.utf-8");
-		std::istringstream ss(str);
-		ss.imbue(locale);
+		std::istringstream ss{};
 
 		std::chrono::sys_seconds tp{};
-		ss >> std::chrono::parse("%Y/%m/%d %H:%M:%S", tp);
+		bool success = false;
+
+		for (size_t i = 0; i < date_formats.size(); ++i) {
+			const auto index = (i + prefered_fmt) % date_formats.size();
+			const auto &fmt = date_formats.at(index);
+			ss.clear();
+			ss.str(str);
+			ss.imbue(locale);
+			
+			ss >> std::chrono::parse(fmt, tp);
+
+			if (!ss.fail()) {
+				success = true;
+				prefered_fmt = index;
+				break;
+			}
+		}
+
+		if (!success) {
+			prefered_fmt = 0;
+			throw std::runtime_error(fmt::format("Failed to parse date: \"{}\"", str));
+		}
 
 		return std::chrono::system_clock::to_time_t(tp);
 	}
@@ -78,34 +104,55 @@ namespace {
 			col_names.push_back(header_string);
 		}
 
-		for (auto &row : reader) {
-			const auto date_str = row[0].get<std::string>();
-			const auto date = parseDate(date_str);
+		bool line_error_shown{false};
+		std::vector<bool> col_error_shown(col_names.size(), false);
+		size_t prefered_date_fmt = 0;
 
-			for (const auto &col_name : col_names) {
-				try {
-					auto val = row[col_name].get<std::string>();
+		for (size_t line = 1; auto &row : reader) {
+			try {
+				const auto date_str = row[0].get<std::string>();
+				const auto date = parseDate(date_str, prefered_date_fmt);
 
-					const auto pos = val.find(',');
-					if (pos != std::string::npos) {
-						val = val.replace(pos, 1, ".");
+				for (size_t col = 2; const auto &col_name : col_names) {
+					try {
+						auto val = row[col_name].get<std::string>();
+
+						const auto pos = val.find(',');
+						if (pos != std::string::npos) {
+							val = val.replace(pos, 1, ".");
+						}
+
+						const auto dbl_val = std::stod(val);
+
+						if (std::isfinite(dbl_val)) {
+							values[col_name].data.emplace_back(date, dbl_val);
+						}
+					} catch (const std::exception & e) {
+						if (!col_error_shown[col]) {
+							spdlog::warn("Error parsing column {} in file {}:{}: {}", col, path.filename().string(),
+										 line, e.what());
+							col_error_shown[col] = true;
+						}
 					}
 
-					const auto dbl_val = std::stod(val);
-
-					if (std::isfinite(dbl_val)) {
-						values[col_name].data.push_back({date, dbl_val});
+					if (stop_loading) {
+						break;
 					}
-				} catch (const std::exception & /*e*/) {}
 
-				if (stop_loading) {
-					break;
+					++col;
+				}
+			} catch (const std::exception &e) {
+				if (!line_error_shown) {
+					spdlog::warn("Error parsing line {}:{}: {}", path.filename().string(), line, e.what());
+					line_error_shown = true;
 				}
 			}
 
 			if (stop_loading) {
 				break;
 			}
+
+			++line;
 		}
 
 		return values;
