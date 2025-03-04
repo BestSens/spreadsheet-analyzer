@@ -190,7 +190,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 	ImGuiIO &io = ImGui::GetIO();
-	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable | ImGuiConfigFlags_NavEnableKeyboard;
 	io.IniFilename = nullptr;
 
 	addFonts();
