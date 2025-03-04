@@ -9,6 +9,15 @@ enum class data_type_t : uint8_t {
 	BOOLEAN
 };
 
+struct data_aggregate_t {
+	time_t date;
+	double min;
+	double max;
+	double mean;
+	double std;
+	double first;
+};
+
 struct data_dict_t {
 	std::string name;
 	std::string uuid;
@@ -18,6 +27,9 @@ struct data_dict_t {
 
 	std::vector<time_t> timestamp{};
 	std::vector<double> data{};
+
+	size_t aggregated_to{0};
+	std::vector<data_aggregate_t> aggregates{};
 };
 
 struct immediate_dict {

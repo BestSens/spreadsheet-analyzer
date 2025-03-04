@@ -19,7 +19,7 @@ public:
 	~AppState() = default;
 
 	// NOLINTBEGIN(misc-non-private-member-variables-in-classes)
-	int max_data_points{10'000};
+	int max_data_points{500};
 
 	std::pair<double, double> global_link{std::numeric_limits<double>::quiet_NaN(),
 										  std::numeric_limits<double>::quiet_NaN()};
