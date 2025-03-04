@@ -155,7 +155,7 @@ namespace {
 		return {plot_width, plot_height};
 	}
 
-	auto doPlot(int current_pos, int n_selected, const data_dict_t &col) -> void {
+	auto doPlot(int current_pos, int n_selected, const data_dict_t &col, const ImVec4 &plot_color) -> void {
 		auto &app_state = AppState::getInstance();
 		const auto max_data_points = static_cast<size_t>(std::max(app_state.max_data_points, 1));
 		const auto global_x_link = app_state.global_x_link;
@@ -239,7 +239,8 @@ namespace {
 				app_state.global_x_mouse_position =
 					ImPlot::GetCurrentPlot()->XAxis(0).PixelsToPlot(ImGui::GetIO().MousePos.x);
 			}
-
+			
+			ImPlot::SetNextLineStyle(plot_color);
 			ImPlot::PlotLineG(col.name.c_str(), plotDict, &plot_data, count);
 			
 			if (app_state.always_show_cursor || app_state.is_ctrl_pressed) {
@@ -286,13 +287,25 @@ auto plotDataInSubplots(const std::vector<data_dict_t> &data, const std::string 
 	const auto subplot_flags =
 		(n_selected > 1 ? ImPlotSubplotFlags_ShareItems : 0) | (!global_x_link ? ImPlotSubplotFlags_LinkAllX : 0);
 
+	static const auto color_map = [&] -> std::vector<ImVec4> {
+		const auto n_colors = ImPlot::GetColormapSize();
+		std::vector<ImVec4> colors{};
+		colors.reserve(coerceCast<size_t>(n_colors));
+
+		for (int i = 0; i < n_colors; ++i) {
+			colors.push_back(ImPlot::GetColormapColor(i));
+		}
+
+		return colors;
+	}();
+
 	if (ImPlot::BeginSubplots(subplot_id.c_str(), rows, cols, plot_size, subplot_flags)) {
 		if (!global_x_link) {
 			fixSubplotRanges(data);
 		}
 
 		for (int i = 0; const auto &col : data | std::views::filter(data_filter)) {
-			doPlot(i, n_selected, col);
+			doPlot(i, n_selected, col, color_map[coerceCast<size_t>(i) % color_map.size()]);
 			++i;
 		}
 
