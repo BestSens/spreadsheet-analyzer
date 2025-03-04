@@ -269,10 +269,6 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 			if (app_state.show_debug_menu) {
 				if (ImGui::BeginMenu("Debug")) {
 					ImGui::InputInt("Max data points", &app_state.max_data_points);
-					ImGui::Separator();
-					const auto fps_str = fmt::format("{:.3f} ms/frame ({:.1f} FPS)", 1000.0f / ImGui::GetIO().Framerate,
-													ImGui::GetIO().Framerate);
-					ImGui::Text("%s", fps_str.c_str());	 // NOLINT(hicpp-vararg)
 					ImGui::EndMenu();
 				}
 			}
@@ -294,6 +290,10 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 		const auto dockspace = ImGui::DockSpaceOverViewport(ImGui::GetID("DockSpace"), ImGui::GetMainViewport(),
 															ImGuiDockNodeFlags_PassthruCentralNode);
+		
+		if (app_state.show_debug_menu) {
+			ImGui::ShowMetricsWindow();
+		}
 
 		for (auto &ctx : window_contexts) {
 			ctx.checkForFinishedLoading();
