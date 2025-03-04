@@ -247,7 +247,12 @@ namespace {
 			}
 			
 			ImPlot::SetNextLineStyle(plot_color);
-			ImPlot::PlotLineG(col.name.c_str(), plotDict, &plot_data, count);
+			ImPlot::SetNextFillStyle(plot_color, 0.8f);
+			switch (col.data_type) {
+				using enum data_type_t;
+				case BOOLEAN: ImPlot::PlotDigitalG(col.name.c_str(), plotDict, &plot_data, count); break;
+				default: ImPlot::PlotLineG(col.name.c_str(), plotDict, &plot_data, count); break;
+			}
 
 			if ((app_state.always_show_cursor || app_state.is_ctrl_pressed) &&
 				app_state.global_x_mouse_position >= static_cast<double>(col.timestamp.front()) &&

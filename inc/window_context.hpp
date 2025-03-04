@@ -173,6 +173,7 @@ public:
 			ImPlot::GetStyle().UseISO8601 = true;
 			ImPlot::GetStyle().Use24HourClock = true;
 			ImPlot::GetStyle().FitPadding = ImVec2(0.025f, 0.1f);
+			ImPlot::GetStyle().DigitalBitHeight = 50.0f;
 		} else {
 			ImPlot::SetCurrentContext(this->implot_context);
 		}

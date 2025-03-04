@@ -249,10 +249,18 @@ auto loadCSVs(const std::vector<std::filesystem::path> &paths, size_t &finished,
 		dd.uuid = uuids::to_string(UUIDGenerator::getInstance().generate());
 		dd.unit = value.unit;
 
+		bool is_boolean = true;
+
 		for (const auto &[date, val] : value.data) {
 			dd.timestamp.push_back(date);
 			dd.data.push_back(val);
+
+			if (val != 0 && val != 1) {
+				is_boolean = false;
+			}
 		}
+
+		dd.data_type = is_boolean ? data_type_t::BOOLEAN : data_type_t::FLOAT;
 
 		values.push_back(dd);
 	}
