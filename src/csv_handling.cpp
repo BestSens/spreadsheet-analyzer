@@ -135,8 +135,8 @@ auto preparePaths(std::vector<std::filesystem::path> paths) -> std::vector<std::
 	return files;
 }
 
-auto loadCSVs(const std::vector<std::filesystem::path> &paths, size_t &finished, const bool &stop_loading,
-			  bool parallel_loading) -> std::vector<data_dict_t> {
+auto loadCSVs(const std::vector<std::filesystem::path> &paths, size_t &finished, const bool &stop_loading)
+	-> std::vector<data_dict_t> {
 	if (paths.empty()) {
 		return {};
 	}
@@ -169,11 +169,7 @@ auto loadCSVs(const std::vector<std::filesystem::path> &paths, size_t &finished,
 		}
 	};
 
-	if (parallel_loading) {
-		std::for_each(std::execution::par, contexts.begin(), contexts.end(), fn);
-	} else {
-		std::for_each(std::execution::seq, contexts.begin(), contexts.end(), fn);
-	}
+	std::for_each(std::execution::seq, contexts.begin(), contexts.end(), fn);
 
 	if (stop_loading) {
 		return {};

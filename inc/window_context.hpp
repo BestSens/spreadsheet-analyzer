@@ -16,14 +16,14 @@
 class WindowContext {
 public:
 	using function_signature =
-		std::function<std::vector<data_dict_t>(std::vector<std::filesystem::path>, size_t &, const bool &, bool)>;
+		std::function<std::vector<data_dict_t>(std::vector<std::filesystem::path>, size_t &, const bool &)>;
 
 	WindowContext() = default;
 	explicit WindowContext(std::vector<data_dict_t> new_data) : data{std::move(new_data)} {}
 
 	WindowContext(const std::vector<std::filesystem::path> &paths, function_signature loading_fn) {
 		spdlog::debug("Creating window context with UUID: {}", this->getUUID());
-		this->loadFiles(paths, loading_fn);
+		this->loadFiles(paths, std::move(loading_fn));
 	}
 
 	~WindowContext() {
@@ -116,10 +116,16 @@ public:
 		}
 
 		this->required_files = paths.size();
-		this->data_dict_f = std::async(std::launch::async, [this, fn, paths] {
-			auto &temp_finished_files = *this->finished_files;
-			const auto &temp_stop_loading = *this->stop_loading;
-			return fn(paths, temp_finished_files, temp_stop_loading, false);
+		this->data_dict_f = std::async(std::launch::async, [this, fn, paths]() -> std::vector<data_dict_t> {
+			try {
+				auto &temp_finished_files = *this->finished_files;
+				const auto &temp_stop_loading = *this->stop_loading;
+				return fn(paths, temp_finished_files, temp_stop_loading);
+			} catch (const std::exception &e) {
+				spdlog::error("error loading files for {}: {}", this->window_title, e.what());
+			}
+
+			return {};
 		});
 	}
 

@@ -107,8 +107,6 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 	}
 
-	bool parallel_loading = false;
-
 	std::list<WindowContext> window_contexts{};
 
 	{
@@ -276,7 +274,6 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 			if (show_debug_menu) {
 				if (ImGui::BeginMenu("Debug")) {
-					if (ImGui::MenuItem("Parallel loading", nullptr, &parallel_loading)) {}
 					ImGui::InputInt("Max data points", &max_data_points);
 					ImGui::Separator();
 					const auto fps_str = fmt::format("{:.3f} ms/frame ({:.1f} FPS)", 1000.0f / ImGui::GetIO().Framerate,
@@ -337,11 +334,12 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 								}
 
 								if (is_shift_pressed) {
-									const auto first_visible =
-										std::find_if(dict.begin(), dict.end(), [](const auto &tmp) { return tmp.visible; });
+									const auto first_visible = std::find_if(
+										dict.begin(), dict.end(), [](const auto &tmp) { return tmp.visible; });
 
-									const auto current_dict = std::find_if(
-										dict.begin(), dict.end(), [&dct](const auto &tmp) { return tmp.uuid == dct.uuid; });
+									const auto current_dict =
+										std::find_if(dict.begin(), dict.end(),
+													 [&dct](const auto &tmp) { return tmp.uuid == dct.uuid; });
 
 									if (first_visible != dict.end() && current_dict != dict.end()) {
 										const auto first_index = std::distance(dict.begin(), first_visible);
