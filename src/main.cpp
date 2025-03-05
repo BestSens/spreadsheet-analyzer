@@ -290,6 +290,8 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 			if (ImGui::BeginMenu("Settings")) {
 				ImGui::MenuItem("Link x-axes globally", nullptr, &app_state.global_x_link);
 				ImGui::MenuItem("Always show date cursor", nullptr, &app_state.always_show_cursor);
+				ImGui::Separator();
+				ImGui::InputInt("Max displayed data points", &app_state.max_data_points, 100, 1'000);
 				ImGui::EndMenu();
 			}
 
@@ -300,7 +302,6 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 			if (app_state.show_debug_menu) {
 				if (ImGui::BeginMenu("Debug")) {
-					ImGui::InputInt("Max data points", &app_state.max_data_points);
 					ImGui::EndMenu();
 				}
 			}

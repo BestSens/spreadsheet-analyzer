@@ -1,4 +1,5 @@
 ## 1.0.1 (unreleased)
+* move configuration of maximum displayed data points to settings menu
 
 ## 1.0.0 (05.03.2025)
 * initial release
