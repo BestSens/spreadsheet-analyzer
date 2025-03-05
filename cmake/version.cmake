@@ -18,7 +18,7 @@ if ("${GIT_REV}" STREQUAL "")
 	endif()
 else()
 	execute_process(
-		COMMAND bash -c "git diff --quiet --exit-code || echo -dirty"
+		COMMAND bash -c "git diff -w --quiet --exit-code || echo -dirty"
 		OUTPUT_VARIABLE GIT_DIFF
 		OUTPUT_STRIP_TRAILING_WHITESPACE
 	)
