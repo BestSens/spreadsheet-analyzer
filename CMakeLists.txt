@@ -21,6 +21,8 @@ if(USE_LTO AND NOT (CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQU
 	set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 endif()
 
+configure_file(assets/app.rc.in app.rc @ONLY)
+
 add_executable(spreadsheet_analyzer
 	src/main.cpp
 	src/about_screen.cpp
@@ -36,7 +38,7 @@ add_executable(spreadsheet_analyzer
 if(WIN32)
 	target_sources(spreadsheet_analyzer PRIVATE
 		assets/manifest.manifest
-		assets/app.rc
+		${CMAKE_CURRENT_BINARY_DIR}/app.rc
 	)
 endif()
 
