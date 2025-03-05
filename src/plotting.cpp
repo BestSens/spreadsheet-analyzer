@@ -40,6 +40,10 @@ namespace {
 
 	auto calculateFullZoomReductionFactor(const data_dict_t &dict) -> size_t {
 		const auto max_points = AppState::getInstance().max_data_points;
+		if (max_points <= 0) {
+			return 1;
+		}
+
 		return getNextReductionFactor(dict.data.size() / static_cast<size_t>(max_points));
 	}
 
@@ -208,7 +212,11 @@ namespace {
 		auto max_val = std::numeric_limits<double>::lowest();
 		auto min_val = std::numeric_limits<double>::max();
 
-		for (size_t i = 0; i < dict.data.size() - reduction_factor; i += reduction_factor) {
+		for (size_t i = 0; i < dict.data.size(); i += reduction_factor) {
+			if (i >= dict.data.size()) {
+				break;
+			}
+
 			const auto count = std::min(reduction_factor, dict.data.size() - i);
 
 			if (reduction_factor == 1) {
