@@ -57,7 +57,10 @@ auto showAboutScreen() -> void {
 	ImGui::PushFont(getFont(fontList::ROBOTO_MONO_20));
 	ImGuiExt::TextUnformattedCentered("Spreadsheet Analyzer");
 	ImGui::PopFont();
-	ImGuiExt::TextUnformattedCentered("Copyright © 2024 BestSens AG");
+	ImGuiExt::TextUnformattedCentered("Copyright © 2025 BestSens AG");
+	if (ImGuiExt::HyperlinkCentered("https://www.bestsens.de")) {
+		openWebpage("https://www.bestsens.de");
+	}
 
 	if (app_state.window_icon != nullptr) {
 		static ImTextureID icon_texture;

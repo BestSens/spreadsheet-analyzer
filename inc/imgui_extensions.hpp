@@ -11,6 +11,8 @@ namespace ImGuiExt {
 	auto TextUnformatted(std::string_view text) -> void;
 	auto TextUnformattedCentered(const std::string& text) -> void;
 	auto Hyperlink(const char *label, const ImVec2 &size_arg = ImVec2(0, 0), ImGuiButtonFlags flags = 0) -> bool;
+	auto HyperlinkCentered(const char *label, const ImVec2 &size_arg = ImVec2(0, 0), ImGuiButtonFlags flags = 0)
+		-> bool;
 
 	auto BeginSubWindow(const char *label, bool *collapsed = nullptr, ImVec2 size = ImVec2(0, 0),
 						ImGuiChildFlags flags = ImGuiChildFlags_None) -> bool;

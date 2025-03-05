@@ -53,6 +53,14 @@ namespace ImGuiExt {
 		return pressed;
 	}
 
+	auto HyperlinkCentered(const char *label, const ImVec2 &size_arg, ImGuiButtonFlags flags) -> bool {
+		const auto window_width = ImGui::GetContentRegionAvail().x;
+		const auto text_width = ImGui::CalcTextSize(label, nullptr, true).x;
+
+		ImGui::SetCursorPosX((window_width - text_width) * 0.5f);
+		return Hyperlink(label, size_arg, flags);
+	}
+
 	auto BeginSubWindow(const char *label, bool *collapsed, ImVec2 size, ImGuiChildFlags flags) -> bool {
 		const bool hasMenuBar = !std::string_view(label).empty();
 
