@@ -27,6 +27,7 @@ struct data_dict_t {
 	data_type_t data_type{data_type_t::FLOAT};
 
 	std::vector<time_t> timestamp{};
+	time_t delta_t{};
 	std::vector<double> data{};
 
 	size_t aggregated_to{0};

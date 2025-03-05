@@ -157,6 +157,26 @@ namespace {
 
 		return values;
 	}
+
+	template <typename T>
+	auto calculateMedian(std::vector<T> data) -> T {
+		if (data.empty()) {
+			return 0;
+		}
+
+		const auto n = data.size() / 2;
+		std::nth_element(std::execution::par_unseq, data.begin(), data.begin() + static_cast<long>(n), data.end());
+
+		if (n % 2 != 0) {
+			return data.at(n);
+		}
+
+		const auto val1 = data.at(n);
+		const auto val2 =
+			*std::max_element(std::execution::par_unseq, data.cbegin(), data.cbegin() + static_cast<long>(n));
+
+		return (val1 + val2) / T{2};
+	}
 }  // namespace
 
 auto preparePaths(std::vector<std::filesystem::path> paths) -> std::vector<std::filesystem::path> {
@@ -261,6 +281,15 @@ auto loadCSVs(const std::vector<std::filesystem::path> &paths, size_t &finished,
 		}
 
 		dd.data_type = is_boolean ? data_type_t::BOOLEAN : data_type_t::FLOAT;
+
+		std::vector<time_t> time_deltas{};
+		time_deltas.reserve(dd.timestamp.size() - 1);
+
+		for (size_t i = 1; i < dd.timestamp.size(); ++i) {
+			time_deltas.push_back(dd.timestamp[i] - dd.timestamp[i - 1]);
+		}
+
+		dd.delta_t = calculateMedian(time_deltas);
 
 		values.push_back(dd);
 	}

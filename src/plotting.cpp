@@ -125,21 +125,82 @@ namespace {
 		return getAggregatedPlotData(i, data, [](const auto &aggregate) { return aggregate.mean - aggregate.std; });
 	}
 
-	auto calculateAggregates(const data_dict_t &dict, size_t reduction_factor) -> std::vector<data_aggregate_t> {
-		std::vector<data_aggregate_t> aggregates{};
-		aggregates.reserve((dict.data.size() / reduction_factor) + 1);
+	auto createSegments(std::span<const time_t> timestamps, time_t gap_threshold)
+		-> std::vector<std::pair<size_t, size_t>> {
+		std::vector<std::pair<size_t, size_t>> segments;
+		size_t segment_start = 0;
 
-		for (size_t i = 0; i < dict.data.size() - reduction_factor; i += reduction_factor) {
-			const auto count = std::min(reduction_factor, dict.data.size() - i);
-			const auto mean = calcMean(std::span{dict.data}.subspan(i, count));
-			const auto stdev = calcStd(std::span{dict.data}.subspan(i, count), mean);
-			const auto min = calcMin(std::span{dict.data}.subspan(i, count));
-			const auto max = calcMax(std::span{dict.data}.subspan(i, count));
-
-			aggregates.push_back(
-				{.date = dict.timestamp[i], .min = min, .max = max, .mean = mean, .std = stdev, .first = dict.data[i]});
+		for (size_t j = 1; j < timestamps.size(); ++j) {
+			const auto ts_diff = timestamps[j] - timestamps[j - 1];
+			if (ts_diff > gap_threshold) {
+				segments.emplace_back(segment_start, j - 1);
+				segment_start = j;
+			}
 		}
 
+		if (segment_start < timestamps.size()) {
+			segments.emplace_back(segment_start, timestamps.size() - 1);
+		}
+
+		if (segments.empty()) {
+			segments.emplace_back(0, timestamps.size() - 1);
+		}
+
+		return segments;
+	}
+
+	auto calculateAggregates(const data_dict_t &dict, size_t reduction_factor) -> std::vector<data_aggregate_t> {
+		const auto segments = createSegments(std::span{dict.timestamp}, dict.delta_t * 10);
+
+		std::vector<data_aggregate_t> aggregates{};
+		aggregates.reserve((dict.data.size() / reduction_factor) + segments.size() + 1);
+
+		for (const auto& segment: segments) {
+			const auto segment_value_span =
+				std::span{dict.data}.subspan(segment.first, segment.second - segment.first + 1);
+			const auto segment_date_span =
+				std::span{dict.timestamp}.subspan(segment.first, segment.second - segment.first + 1);
+
+			for (size_t i = 0; i < segment_value_span.size(); i += reduction_factor) {
+				if (i >= segment_value_span.size()) {
+					break;
+				}
+
+				const auto count = std::min(reduction_factor, segment_value_span.size() - i);
+				const auto value_span = segment_value_span.subspan(i, count);
+				const auto date_span = segment_date_span.subspan(i, count);
+
+				if (count >= 3) {
+					const auto mean = calcMean(value_span);
+					const auto stdev = calcStd(value_span, mean);
+					const auto min = calcMin(value_span);
+					const auto max = calcMax(value_span);
+
+					aggregates.push_back({.date = date_span.front(),
+										  .min = min,
+										  .max = max,
+										  .mean = mean,
+										  .std = stdev,
+										  .first = value_span.front()});
+				} else {
+					aggregates.push_back({.date = date_span.front(),
+										  .min = value_span.front(),
+										  .max = value_span.front(),
+										  .mean = value_span.front(),
+										  .std = 0,
+										  .first = value_span.front()});
+				}
+			}
+
+			aggregates.push_back({.date = segment_date_span.back(),
+								  .min = std::numeric_limits<double>::quiet_NaN(),
+								  .max = std::numeric_limits<double>::quiet_NaN(),
+								  .mean = std::numeric_limits<double>::quiet_NaN(),
+								  .std = std::numeric_limits<double>::quiet_NaN(),
+								  .first = std::numeric_limits<double>::quiet_NaN()});
+		}
+
+		aggregates.shrink_to_fit();
 		return aggregates;
 	}
 
@@ -176,9 +237,6 @@ namespace {
 			return;
 		}
 
-		dict.aggregates.clear();
-		dict.aggregates.reserve((dict.data.size() / reduction_factor) + 1);
-
 		spdlog::debug("recalculating aggregates for {} with reduction factor {}", dict.name, reduction_factor);
 
 		dict.aggregates = calculateAggregates(dict, reduction_factor);
@@ -187,8 +245,6 @@ namespace {
 		const auto max_data_points = AppState::getInstance().max_data_points;
 		if (dict.fit_zoom_calculated_for_points != max_data_points) {
 			const auto full_reduction_factor = calculateFullZoomReductionFactor(dict);
-			spdlog::debug("recalculating full zoom aggregates for {} with reduction factor {}", dict.name,
-						  full_reduction_factor);
 			dict.fit_zoom_range = getValueRangeAggregated(dict, full_reduction_factor);
 			dict.fit_zoom_calculated_for_points = max_data_points;
 		}
