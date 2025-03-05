@@ -513,13 +513,14 @@ namespace {
 					if (reduction_factor > 1) {
 						const auto shaded_name = "##" + col.name + "##shaded";
 						ImPlot::PlotLineG(col.name.c_str(), plotDictMean, &plot_data, padded_count);
-						ImPlot::SetNextFillStyle(plot_color, 0.25f);
-
+						
 						if (reduction_factor >= 100) {
+							ImPlot::SetNextFillStyle(plot_color, 0.25f);
 							ImPlot::PlotShadedG(shaded_name.c_str(), plotDictStdMinus, &plot_data, plotDictStdPlus,
 												&plot_data, padded_count);
 
 						} else {
+							ImPlot::SetNextFillStyle(cursor_color, 0.25f);
 							ImPlot::PlotShadedG(shaded_name.c_str(), plotDictMin, &plot_data, plotDictMax, &plot_data,
 												padded_count);
 						}
