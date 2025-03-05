@@ -6,3 +6,6 @@ Spreadsheet Analyzer is a graphical application designed to load, analyze, and v
 - Load and visualize CSV files.
 - Interactive data plotting using ImPlot.
 - Support for opening files and folders via the GUI.
+- Automatic aggregation of large data sets depending on zoom level
+- Hardware accelerated
+- Portable
