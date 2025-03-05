@@ -60,6 +60,14 @@ namespace {
 			return {plot_data.linked_date_range.first, std::numeric_limits<double>::quiet_NaN()};
 		}
 
+		if (i == plot_data.count - 3) {
+			return {std::numeric_limits<double>::quiet_NaN(), dd.aggregate_range.first};
+		}
+
+		if (i == plot_data.count - 2) {
+			return {std::numeric_limits<double>::quiet_NaN(), dd.aggregate_range.second};
+		}
+
 		if (i == plot_data.count - 1) {
 			return {plot_data.linked_date_range.second, std::numeric_limits<double>::quiet_NaN()};
 		}
@@ -112,12 +120,23 @@ namespace {
 
 		spdlog::debug("recalculating aggregates for {} with reduction factor {}", dict.name, reduction_factor);
 
+		auto max_val = std::numeric_limits<double>::lowest();
+		auto min_val = std::numeric_limits<double>::max();
+
 		for (size_t i = 0; i < dict.data.size() - reduction_factor; i += reduction_factor) {
 			const auto count = std::min(reduction_factor, dict.data.size() - i);
 			const auto mean = calcMean(std::span{dict.data}.subspan(i, count));
 			const auto stdev = calcStd(std::span{dict.data}.subspan(i, count));
 			const auto min = calcMin(std::span{dict.data}.subspan(i, count));
 			const auto max = calcMax(std::span{dict.data}.subspan(i, count));
+
+			if (mean < min_val) {
+				min_val = mean;
+			}
+
+			if (mean > max_val) {
+				max_val = mean;
+			}
 
 			dict.aggregates.push_back({.date = dict.timestamp[i],
 										.min = min,
@@ -127,6 +146,7 @@ namespace {
 										.first = dict.data[i]});
 		}
 
+		dict.aggregate_range = {min_val, max_val};
 		dict.aggregated_to = reduction_factor;
 
 		spdlog::debug("recalculated aggregates for {} with reduction factor {}", dict.name, reduction_factor);
@@ -360,7 +380,7 @@ namespace {
 				count = std::clamp(count, 0uz, col.aggregates.size());
 				return static_cast<int>(count);
 			}();
-			const auto padded_count = count + 2;
+			const auto padded_count = count + 4;
 
 			plot_data_t plot_data{.data = &col,
 								  .reduction_factor = reduction_factor_stepped,

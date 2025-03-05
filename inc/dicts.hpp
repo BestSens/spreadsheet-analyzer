@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ctime>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -30,6 +31,8 @@ struct data_dict_t {
 
 	size_t aggregated_to{0};
 	std::vector<data_aggregate_t> aggregates{};
+	std::pair<double, double> aggregate_range{std::numeric_limits<double>::quiet_NaN(),
+											  std::numeric_limits<double>::quiet_NaN()};
 };
 
 struct immediate_dict {
