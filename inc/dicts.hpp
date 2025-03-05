@@ -31,8 +31,9 @@ struct data_dict_t {
 
 	size_t aggregated_to{0};
 	std::vector<data_aggregate_t> aggregates{};
-	std::pair<double, double> aggregate_range{std::numeric_limits<double>::quiet_NaN(),
-											  std::numeric_limits<double>::quiet_NaN()};
+	std::pair<double, double> fit_zoom_range{std::numeric_limits<double>::quiet_NaN(),
+											 std::numeric_limits<double>::quiet_NaN()};
+	int fit_zoom_calculated_for_points{0};
 };
 
 struct immediate_dict {

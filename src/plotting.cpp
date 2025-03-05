@@ -1,6 +1,7 @@
 #include "plotting.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <cstdint>
 #include <numeric>
@@ -27,6 +28,21 @@ namespace {
 		std::pair<double, double> linked_date_range;
 	};
 
+	constexpr auto reduction_steps =
+		std::array{1uz,		 10uz,	   50uz,	  100uz,	 500uz,		  1'000uz,	   5'000uz,
+				   10'000uz, 50'000uz, 100'000uz, 500'000uz, 1'000'000uz, 10'000'000uz};
+
+	constexpr auto getNextReductionFactor(size_t requested_factor) -> size_t {
+		const auto it =
+			std::ranges::find_if(reduction_steps, [requested_factor](const auto &e) { return e >= requested_factor; });
+		return it != reduction_steps.end() ? *it : reduction_steps.back();
+	}
+
+	auto calculateFullZoomReductionFactor(const data_dict_t &dict) -> size_t {
+		const auto max_points = AppState::getInstance().max_data_points;
+		return getNextReductionFactor(dict.data.size() / static_cast<size_t>(max_points));
+	}
+
 	auto calcMax(std::span<const double> data) -> double {
 		return *std::ranges::max_element(data);
 	}
@@ -39,8 +55,7 @@ namespace {
 		return std::accumulate(data.begin(), data.end(), 0.0) / static_cast<double>(data.size());
 	}
 
-	auto calcStd(std::span<const double> data) -> double {
-		const auto mean = calcMean(data);
+	auto calcStd(std::span<const double> data, double mean) -> double {
 		return std::sqrt(std::accumulate(data.begin(), data.end(), 0.0,
 										 [mean](const auto &a, const auto &b) { return a + (b - mean) * (b - mean); }) /
 						 static_cast<double>(data.size()));
@@ -61,11 +76,11 @@ namespace {
 		}
 
 		if (i == plot_data.count - 3) {
-			return {std::numeric_limits<double>::quiet_NaN(), dd.aggregate_range.first};
+			return {std::numeric_limits<double>::quiet_NaN(), dd.fit_zoom_range.first};
 		}
 
 		if (i == plot_data.count - 2) {
-			return {std::numeric_limits<double>::quiet_NaN(), dd.aggregate_range.second};
+			return {std::numeric_limits<double>::quiet_NaN(), dd.fit_zoom_range.second};
 		}
 
 		if (i == plot_data.count - 1) {
@@ -110,6 +125,52 @@ namespace {
 		return getAggregatedPlotData(i, data, [](const auto &aggregate) { return aggregate.mean - aggregate.std; });
 	}
 
+	auto calculateAggregates(const data_dict_t &dict, size_t reduction_factor) -> std::vector<data_aggregate_t> {
+		std::vector<data_aggregate_t> aggregates{};
+		aggregates.reserve((dict.data.size() / reduction_factor) + 1);
+
+		for (size_t i = 0; i < dict.data.size() - reduction_factor; i += reduction_factor) {
+			const auto count = std::min(reduction_factor, dict.data.size() - i);
+			const auto mean = calcMean(std::span{dict.data}.subspan(i, count));
+			const auto stdev = calcStd(std::span{dict.data}.subspan(i, count), mean);
+			const auto min = calcMin(std::span{dict.data}.subspan(i, count));
+			const auto max = calcMax(std::span{dict.data}.subspan(i, count));
+
+			aggregates.push_back(
+				{.date = dict.timestamp[i], .min = min, .max = max, .mean = mean, .std = stdev, .first = dict.data[i]});
+		}
+
+		return aggregates;
+	}
+
+	auto getValueRangeAggregated(const data_dict_t &dict, size_t reduction_factor) -> std::pair<double, double> {
+		auto max_val = std::numeric_limits<double>::lowest();
+		auto min_val = std::numeric_limits<double>::max();
+
+		for (size_t i = 0; i < dict.data.size() - reduction_factor; i += reduction_factor) {
+			const auto count = std::min(reduction_factor, dict.data.size() - i);
+
+			if (reduction_factor == 1) {
+				max_val = std::max(max_val, dict.data[i]);
+				min_val = std::min(min_val, dict.data[i]);
+			} else if (reduction_factor <= 100) {
+				const auto min = calcMin(std::span{dict.data}.subspan(i, count));
+				const auto max = calcMax(std::span{dict.data}.subspan(i, count));
+				
+				max_val = std::max(max_val, max);
+				min_val = std::min(min_val, min);
+			} else {
+				const auto mean = calcMean(std::span{dict.data}.subspan(i, count));
+				const auto stdev = calcStd(std::span{dict.data}.subspan(i, count), mean);
+				
+				max_val = std::max(max_val, mean + stdev);
+				min_val = std::min(min_val, mean - stdev);
+			}
+		}
+
+		return {min_val, max_val};
+	}
+
 	auto checkAggregate(data_dict_t& dict, size_t reduction_factor) -> void {
 		if (dict.aggregated_to == reduction_factor && !dict.aggregates.empty()) {
 			return;
@@ -120,34 +181,17 @@ namespace {
 
 		spdlog::debug("recalculating aggregates for {} with reduction factor {}", dict.name, reduction_factor);
 
-		auto max_val = std::numeric_limits<double>::lowest();
-		auto min_val = std::numeric_limits<double>::max();
-
-		for (size_t i = 0; i < dict.data.size() - reduction_factor; i += reduction_factor) {
-			const auto count = std::min(reduction_factor, dict.data.size() - i);
-			const auto mean = calcMean(std::span{dict.data}.subspan(i, count));
-			const auto stdev = calcStd(std::span{dict.data}.subspan(i, count));
-			const auto min = calcMin(std::span{dict.data}.subspan(i, count));
-			const auto max = calcMax(std::span{dict.data}.subspan(i, count));
-
-			if (mean < min_val) {
-				min_val = mean;
-			}
-
-			if (mean > max_val) {
-				max_val = mean;
-			}
-
-			dict.aggregates.push_back({.date = dict.timestamp[i],
-										.min = min,
-										.max = max,
-										.mean = mean,
-										.std = stdev,
-										.first = dict.data[i]});
-		}
-
-		dict.aggregate_range = {min_val, max_val};
+		dict.aggregates = calculateAggregates(dict, reduction_factor);
 		dict.aggregated_to = reduction_factor;
+
+		const auto max_data_points = AppState::getInstance().max_data_points;
+		if (dict.fit_zoom_calculated_for_points != max_data_points) {
+			const auto full_reduction_factor = calculateFullZoomReductionFactor(dict);
+			spdlog::debug("recalculating full zoom aggregates for {} with reduction factor {}", dict.name,
+						  full_reduction_factor);
+			dict.fit_zoom_range = getValueRangeAggregated(dict, full_reduction_factor);
+			dict.fit_zoom_calculated_for_points = max_data_points;
+		}
 
 		spdlog::debug("recalculated aggregates for {} with reduction factor {}", dict.name, reduction_factor);
 	}
@@ -358,7 +402,7 @@ namespace {
 			const auto points_in_range = stop_index - start_index;
 			const auto reduction_factor =
 				std::clamp(fastCeil<size_t>(points_in_range, max_data_points), 1uz, std::numeric_limits<size_t>::max());
-			const auto reduction_factor_stepped = std::bit_ceil(reduction_factor);
+			const auto reduction_factor_stepped = getNextReductionFactor(reduction_factor);
 
 			const auto date_lims = [&]() {
 				if (is_x_linked) {
@@ -407,7 +451,7 @@ namespace {
 						ImPlot::PlotLineG(col.name.c_str(), plotDictMean, &plot_data, padded_count);
 						ImPlot::SetNextFillStyle(plot_color, 0.25f);
 
-						if (reduction_factor > 100) {
+						if (reduction_factor >= 100) {
 							ImPlot::PlotShadedG(shaded_name.c_str(), plotDictStdMinus, &plot_data, plotDictStdPlus,
 												&plot_data, padded_count);
 
