@@ -26,7 +26,8 @@ Checks: >-
     -readability-else-after-return,
     -readability-braces-around-statements,
     -readability-uppercase-literal-suffix,
-    -readability-identifier-length
+    -readability-identifier-length,
+    -readability-redundant-member-init
 HeaderFilterRegex: ''
 FormatStyle: none
 CheckOptions:
