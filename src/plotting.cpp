@@ -46,15 +46,15 @@ namespace {
 						 static_cast<double>(data.size()));
 	}
 
-	auto plotDict(int i, void *data) -> ImPlotPoint {
+	auto getAggregatedPlotData(int i, void *data, auto fn) -> ImPlotPoint {
 		assert(i >= 0);
 		assert(data != nullptr);
 
 		const auto &plot_data = *static_cast<plot_data_t *>(data);
 		const auto &dd = *plot_data.data;
 
-		assert(plot_data.aggregated_to > 0);
-		assert(plot_data.aggregatet_to == plot_data.reduction_factor);
+		assert(dd.aggregated_to > 0);
+		assert(dd.aggregated_to == plot_data.reduction_factor);
 
 		if (i == 0) {
 			return {plot_data.linked_date_range.first, std::numeric_limits<double>::quiet_NaN()};
@@ -64,118 +64,42 @@ namespace {
 			return {plot_data.linked_date_range.second, std::numeric_limits<double>::quiet_NaN()};
 		}
 
-		const auto& aggregate = dd.aggregates.at(plot_data.start_index + coerceCast<size_t>(i - 1));
-		return {static_cast<double>(aggregate.date), aggregate.first};
+		const auto resulting_idx =
+			std::min(plot_data.start_index + coerceCast<size_t>(i) - 1, dd.aggregates.size() - 1);
+
+		try {
+			const auto &aggregate = dd.aggregates.at(resulting_idx);
+			return {static_cast<double>(aggregate.date), fn(aggregate)};
+		} catch (const std::exception &e) {
+			spdlog::error("{} i = {}, plot_data.start_index = {}, aggregates.size() = {}", e.what(), resulting_idx,
+						  plot_data.start_index, dd.aggregates.size());
+		}
+
+		return {std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::quiet_NaN()};
+	}
+
+	auto plotDict(int i, void *data) -> ImPlotPoint {
+		return getAggregatedPlotData(i, data, [](const auto &aggregate) { return aggregate.first; });
 	}
 
 	auto plotDictMean(int i, void *data) -> ImPlotPoint {
-		assert(i >= 0);
-		assert(data != nullptr);
-
-		const auto &plot_data = *static_cast<plot_data_t *>(data);
-		const auto &dd = *plot_data.data;
-
-		assert(plot_data.aggregated_to > 0);
-		assert(plot_data.aggregatet_to == plot_data.reduction_factor);
-
-		if (i == 0) {
-			return {plot_data.linked_date_range.first, std::numeric_limits<double>::quiet_NaN()};
-		}
-
-		if (i == plot_data.count - 1) {
-			return {plot_data.linked_date_range.second, std::numeric_limits<double>::quiet_NaN()};
-		}
-
-		const auto& aggregate = dd.aggregates.at(plot_data.start_index + coerceCast<size_t>(i - 1));
-		return {static_cast<double>(aggregate.date), aggregate.mean};
+		return getAggregatedPlotData(i, data, [](const auto &aggregate) { return aggregate.mean; });
 	}
 
 	auto plotDictMax(int i, void *data) -> ImPlotPoint {
-		assert(i >= 0);
-		assert(data != nullptr);
-
-		const auto &plot_data = *static_cast<plot_data_t *>(data);
-		const auto &dd = *plot_data.data;
-
-		assert(plot_data.aggregated_to > 0);
-		assert(plot_data.aggregatet_to == plot_data.reduction_factor);
-
-		if (i == 0) {
-			return {plot_data.linked_date_range.first, std::numeric_limits<double>::quiet_NaN()};
-		}
-
-		if (i == plot_data.count - 1) {
-			return {plot_data.linked_date_range.second, std::numeric_limits<double>::quiet_NaN()};
-		}
-
-		const auto& aggregate = dd.aggregates.at(plot_data.start_index + coerceCast<size_t>(i - 1));
-		return {static_cast<double>(aggregate.date), aggregate.max};
+		return getAggregatedPlotData(i, data, [](const auto &aggregate) { return aggregate.max; });
 	}
 
 	auto plotDictMin(int i, void *data) -> ImPlotPoint {
-		assert(i >= 0);
-		assert(data != nullptr);
-
-		const auto &plot_data = *static_cast<plot_data_t *>(data);
-		const auto &dd = *plot_data.data;
-
-		assert(plot_data.aggregated_to > 0);
-		assert(plot_data.aggregatet_to == plot_data.reduction_factor);
-
-		if (i == 0) {
-			return {plot_data.linked_date_range.first, std::numeric_limits<double>::quiet_NaN()};
-		}
-
-		if (i == plot_data.count - 1) {
-			return {plot_data.linked_date_range.second, std::numeric_limits<double>::quiet_NaN()};
-		}
-
-		const auto& aggregate = dd.aggregates.at(plot_data.start_index + coerceCast<size_t>(i - 1));
-		return {static_cast<double>(aggregate.date), aggregate.min};
+		return getAggregatedPlotData(i, data, [](const auto &aggregate) { return aggregate.min; });
 	}
 
 	auto plotDictStdPlus(int i, void *data) -> ImPlotPoint {
-		assert(i >= 0);
-		assert(data != nullptr);
-
-		const auto &plot_data = *static_cast<plot_data_t *>(data);
-		const auto &dd = *plot_data.data;
-
-		assert(plot_data.aggregated_to > 0);
-		assert(plot_data.aggregatet_to == plot_data.reduction_factor);
-
-		if (i == 0) {
-			return {plot_data.linked_date_range.first, std::numeric_limits<double>::quiet_NaN()};
-		}
-
-		if (i == plot_data.count - 1) {
-			return {plot_data.linked_date_range.second, std::numeric_limits<double>::quiet_NaN()};
-		}
-
-		const auto& aggregate = dd.aggregates.at(plot_data.start_index + coerceCast<size_t>(i - 1));
-		return {static_cast<double>(aggregate.date), aggregate.mean + aggregate.std};
+		return getAggregatedPlotData(i, data, [](const auto &aggregate) { return aggregate.mean + aggregate.std; });
 	}
 
 	auto plotDictStdMinus(int i, void *data) -> ImPlotPoint {
-		assert(i >= 0);
-		assert(data != nullptr);
-
-		const auto &plot_data = *static_cast<plot_data_t *>(data);
-		const auto &dd = *plot_data.data;
-
-		assert(plot_data.aggregated_to > 0);
-		assert(plot_data.aggregatet_to == plot_data.reduction_factor);
-
-		if (i == 0) {
-			return {plot_data.linked_date_range.first, std::numeric_limits<double>::quiet_NaN()};
-		}
-
-		if (i == plot_data.count - 1) {
-			return {plot_data.linked_date_range.second, std::numeric_limits<double>::quiet_NaN()};
-		}
-
-		const auto& aggregate = dd.aggregates.at(plot_data.start_index + coerceCast<size_t>(i - 1));
-		return {static_cast<double>(aggregate.date), aggregate.mean - aggregate.std};
+		return getAggregatedPlotData(i, data, [](const auto &aggregate) { return aggregate.mean - aggregate.std; });
 	}
 
 	auto checkAggregate(data_dict_t& dict, size_t reduction_factor) -> void {
@@ -184,21 +108,28 @@ namespace {
 		}
 
 		dict.aggregates.clear();
+		dict.aggregates.reserve((dict.data.size() / reduction_factor) + 1);
 
 		spdlog::debug("recalculating aggregates for {} with reduction factor {}", dict.name, reduction_factor);
 
-		for (size_t i = 0; i < dict.data.size(); i += reduction_factor) {
+		for (size_t i = 0; i < dict.data.size() - reduction_factor; i += reduction_factor) {
 			const auto count = std::min(reduction_factor, dict.data.size() - i);
 			const auto mean = calcMean(std::span{dict.data}.subspan(i, count));
 			const auto stdev = calcStd(std::span{dict.data}.subspan(i, count));
 			const auto min = calcMin(std::span{dict.data}.subspan(i, count));
 			const auto max = calcMax(std::span{dict.data}.subspan(i, count));
 
-			dict.aggregates.push_back(
-				{.date = dict.timestamp[i], .min = min, .max = max, .mean = mean, .std = stdev, .first = dict.data[i]});
+			dict.aggregates.push_back({.date = dict.timestamp[i],
+										.min = min,
+										.max = max,
+										.mean = mean,
+										.std = stdev,
+										.first = dict.data[i]});
 		}
 
 		dict.aggregated_to = reduction_factor;
+
+		spdlog::debug("recalculated aggregates for {} with reduction factor {}", dict.name, reduction_factor);
 	}
 
 	auto getDateRange(const data_dict_t &data) -> std::pair<double, double> {
@@ -222,7 +153,37 @@ namespace {
 		const auto start_it = std::ranges::lower_bound(date, start);
 		const auto stop_it = std::ranges::upper_bound(date, stop);
 
-		return {static_cast<size_t>(start_it - date.begin()), static_cast<size_t>(stop_it - date.begin())};
+		auto start_index = static_cast<size_t>(start_it - date.begin());
+		auto stop_index = static_cast<size_t>(stop_it - date.begin());
+
+		if (start_index > 0) {
+			start_index -= 1;
+		}
+
+		stop_index = std::min(stop_index, date.size() - 1);
+
+		return {start_index, stop_index};
+	}
+
+	auto getIndicesFromAggregate(const std::vector<data_aggregate_t> &agg, const ImPlotRange &limits)
+		-> std::pair<size_t, size_t> {
+		const auto start = static_cast<time_t>(limits.Min);
+		const auto stop = static_cast<time_t>(limits.Max);
+		const auto start_it =
+			std::ranges::lower_bound(agg, start, std::ranges::less{}, &data_aggregate_t::date);
+		const auto stop_it =
+			std::ranges::upper_bound(agg, stop, std::ranges::less{}, &data_aggregate_t::date);
+
+		auto start_index = static_cast<size_t>(start_it - agg.begin());
+		auto stop_index = static_cast<size_t>(stop_it - agg.begin());
+
+		if (start_index > 0) {
+			start_index -= 1;
+		}
+
+		stop_index = std::min(stop_index, agg.size() - 1);
+
+		return {start_index, stop_index};
 	}
 
 	auto getXLims(const std::vector<data_dict_t> &data) -> std::pair<double, double> {
@@ -393,11 +354,18 @@ namespace {
 
 			checkAggregate(col, reduction_factor_stepped);
 
-			const auto count = coerceCast<int>(fastCeil(points_in_range, reduction_factor_stepped)) + 2;
+			const auto [start_index_agg, stop_index_agg] = getIndicesFromAggregate(col.aggregates, limits.X);
+			const auto count = [&]() -> int {
+				auto count = stop_index_agg - start_index_agg + 1;
+				count = std::clamp(count, 0uz, col.aggregates.size());
+				return static_cast<int>(count);
+			}();
+			const auto padded_count = count + 2;
+
 			plot_data_t plot_data{.data = &col,
 								  .reduction_factor = reduction_factor_stepped,
-								  .start_index = fastCeil(start_index, reduction_factor_stepped),
-								  .count = count,
+								  .start_index = start_index_agg,
+								  .count = padded_count,
 								  .linked_date_range = date_lims};
 
 			if (ImPlot::IsPlotHovered()) {
@@ -409,26 +377,26 @@ namespace {
 				using enum data_type_t;
 				case BOOLEAN:
 					ImPlot::SetNextFillStyle(plot_color, 0.8f);
-					ImPlot::PlotDigitalG(col.name.c_str(), plotDict, &plot_data, count);
+					ImPlot::PlotDigitalG(col.name.c_str(), plotDict, &plot_data, padded_count);
 					break;
 				default:
 					ImPlot::SetNextLineStyle(plot_color);
 
 					if (reduction_factor > 1) {
 						const auto shaded_name = "##" + col.name + "##shaded";
-						ImPlot::PlotLineG(col.name.c_str(), plotDictMean, &plot_data, count);
+						ImPlot::PlotLineG(col.name.c_str(), plotDictMean, &plot_data, padded_count);
 						ImPlot::SetNextFillStyle(plot_color, 0.25f);
 
 						if (reduction_factor > 100) {
 							ImPlot::PlotShadedG(shaded_name.c_str(), plotDictStdMinus, &plot_data, plotDictStdPlus,
-												&plot_data, count);
+												&plot_data, padded_count);
 
 						} else {
 							ImPlot::PlotShadedG(shaded_name.c_str(), plotDictMin, &plot_data, plotDictMax, &plot_data,
-												count);
+												padded_count);
 						}
 					} else {
-						ImPlot::PlotLineG(col.name.c_str(), plotDict, &plot_data, count);
+						ImPlot::PlotLineG(col.name.c_str(), plotDict, &plot_data, padded_count);
 					}
 
 					break;
