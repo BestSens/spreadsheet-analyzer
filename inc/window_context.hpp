@@ -165,6 +165,14 @@ public:
 		return uuids::to_string(this->uuid);
 	}
 
+	[[nodiscard]] auto getAssignedPlotIDs() const -> std::vector<std::string> {
+		return this->assigned_plot_ids;
+	}
+
+	auto setAssignedPlotIDs(const std::vector<std::string> &ids) -> void {
+		this->assigned_plot_ids = ids;
+	}
+
 	auto switchToImPlotContext() -> void {
 		if (this->implot_context == nullptr) {
 			this->implot_context = ImPlot::CreateContext();
@@ -191,4 +199,6 @@ private:
 	size_t required_files{0};
 	std::string window_title;
 	uuids::uuid uuid{UUIDGenerator::getInstance().generate()};
+
+	std::vector<std::string> assigned_plot_ids{};
 };

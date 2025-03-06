@@ -29,9 +29,11 @@ public:
 
 	bool global_x_link{false};
 	bool always_show_cursor{true};
+	bool always_use_subplots{false};
 	
 	bool is_ctrl_pressed{false};
 	bool is_shift_pressed{false};
+
 	bool show_about{false};
 	bool show_debug_menu{false};
 	

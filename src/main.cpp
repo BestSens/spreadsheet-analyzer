@@ -293,6 +293,8 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 				ImGui::MenuItem("Link x-axes globally", nullptr, &app_state.global_x_link);
 				ImGui::MenuItem("Always show date cursor", nullptr, &app_state.always_show_cursor);
 				ImGui::Separator();
+				ImGui::MenuItem("Always use subplots", nullptr, &app_state.always_use_subplots);
+				ImGui::Separator();
 				ImGui::InputInt("Max displayed data points", &app_state.max_data_points, 100, 1'000);
 				ImGui::EndMenu();
 			}
@@ -400,7 +402,8 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 					ImGui::PushFont(getFont(fontList::ROBOTO_MONO_16));
 					
 					ctx.switchToImPlotContext();
-					plotDataInSubplots(dict, ctx.getUUID());
+					const auto assigned_plot_ids = plotDataInSubplots(dict, ctx.getUUID(), ctx.getAssignedPlotIDs());
+					ctx.setAssignedPlotIDs(assigned_plot_ids);
 					
 					if (app_state.show_debug_menu) {
 						ImGui::PushID(ctx.getUUID().c_str());

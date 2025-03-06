@@ -240,6 +240,15 @@ namespace {
 		return {min_val, max_val};
 	}
 
+	auto recalculateFitZoomRange(data_dict_t &dict) -> void {
+		const auto max_data_points = AppState::getInstance().max_data_points;
+		if (dict.fit_zoom_calculated_for_points != max_data_points) {
+			const auto full_reduction_factor = calculateFullZoomReductionFactor(dict);
+			dict.fit_zoom_range = getValueRangeAggregated(dict, full_reduction_factor);
+			dict.fit_zoom_calculated_for_points = max_data_points;
+		}
+	}
+
 	auto checkAggregate(data_dict_t& dict, size_t reduction_factor) -> void {
 		if (dict.aggregated_to == reduction_factor && !dict.aggregates.empty()) {
 			return;
@@ -249,13 +258,6 @@ namespace {
 
 		dict.aggregates = calculateAggregates(dict, reduction_factor);
 		dict.aggregated_to = reduction_factor;
-
-		const auto max_data_points = AppState::getInstance().max_data_points;
-		if (dict.fit_zoom_calculated_for_points != max_data_points) {
-			const auto full_reduction_factor = calculateFullZoomReductionFactor(dict);
-			dict.fit_zoom_range = getValueRangeAggregated(dict, full_reduction_factor);
-			dict.fit_zoom_calculated_for_points = max_data_points;
-		}
 
 		spdlog::debug("recalculated aggregates for {} with reduction factor {}", dict.name, reduction_factor);
 	}
@@ -344,7 +346,18 @@ namespace {
 		return {date_min - padding, date_max + padding};
 	}
 
-	[[maybe_unused]] auto fixSubplotRanges(const std::vector<data_dict_t> &data) -> void {
+	auto getPaddedYLims(const data_dict_t &col) -> std::pair<double, double> {
+		const auto data_min = col.fit_zoom_range.first;
+		const auto data_max = col.fit_zoom_range.second;
+
+		const auto padding_percent = ImPlot::GetStyle().FitPadding.y;
+		const auto full_range = data_max - data_min;
+		const auto padding = full_range * static_cast<double>(padding_percent);
+
+		return {data_min - padding, data_max + padding};
+	}
+
+	auto fixSubplotRanges(const std::vector<data_dict_t> &data) -> void {
 		auto *implot_ctx = ImPlot::GetCurrentContext();
 		auto *subplot = implot_ctx->CurrentSubplot;
 
@@ -395,10 +408,167 @@ namespace {
 		return temp;
 	}
 
-	auto doPlot(int current_pos, int n_selected, int col_count, data_dict_t &col, const ImVec4 &plot_color,
-				const std::pair<double, double> &window_date_range) -> void {
+	auto plotSingleMesurement(data_dict_t &col, const ImVec4 &plot_color, const std::pair<double, double> &date_lims)
+		-> void {
 		auto &app_state = AppState::getInstance();
 		const auto max_data_points = static_cast<size_t>(std::max(app_state.max_data_points, 1));
+		
+		const auto limits = ImPlot::GetPlotLimits(ImAxis_X1);
+		const auto [start_index, stop_index] = getIndicesFromTimeRange(col.timestamp, limits.X);
+		const auto points_in_range = stop_index - start_index;
+		const auto reduction_factor =
+			std::clamp(fastCeil<size_t>(points_in_range, max_data_points), 1uz, std::numeric_limits<size_t>::max());
+		const auto reduction_factor_stepped = getNextReductionFactor(reduction_factor);
+
+		checkAggregate(col, reduction_factor_stepped);
+
+		const auto [start_index_agg, stop_index_agg] = getIndicesFromAggregate(col.aggregates, limits.X);
+		const auto count = [&]() -> int {
+			auto temp = stop_index_agg - start_index_agg + 1;
+			temp = std::clamp(temp, 0uz, col.aggregates.size());
+			return static_cast<int>(temp);
+		}();
+		const auto padded_count = count + 4;
+
+		plot_data_t plot_data{.data = &col,
+							  .reduction_factor = reduction_factor_stepped,
+							  .start_index = start_index_agg,
+							  .count = padded_count,
+							  .linked_date_range = date_lims};
+
+		switch (col.data_type) {
+			using enum data_type_t;
+		case BOOLEAN:
+			ImPlot::SetNextFillStyle(plot_color, 0.8f);
+			ImPlot::PlotDigitalG(col.name.c_str(), plotDict, &plot_data, padded_count);
+			break;
+		default:
+			ImPlot::SetNextLineStyle(plot_color);
+
+			if (reduction_factor > 1) {
+				const auto shaded_name = "##" + col.name + "##shaded";
+				ImPlot::PlotLineG(col.name.c_str(), plotDictMean, &plot_data, padded_count);
+
+				if (reduction_factor >= 100) {
+					ImPlot::SetNextFillStyle(plot_color, 0.25f);
+					ImPlot::PlotShadedG(shaded_name.c_str(), plotDictStdMinus, &plot_data, plotDictStdPlus, &plot_data,
+										padded_count);
+
+				} else {
+					const auto cursor_color = getCursorColor();
+					ImPlot::SetNextFillStyle(cursor_color, 0.25f);
+					ImPlot::PlotShadedG(shaded_name.c_str(), plotDictMin, &plot_data, plotDictMax, &plot_data,
+										padded_count);
+				}
+			} else {
+				ImPlot::PlotLineG(col.name.c_str(), plotDict, &plot_data, padded_count);
+			}
+
+			break;
+		}
+	}
+
+	auto getFormatString(const data_dict_t &col) -> std::string {
+		if (col.unit.empty()) {
+			return "%g";
+		}
+
+		if (col.unit == "%") {
+			return "%g%%";
+		}
+
+		return "%g " + col.unit;
+	}
+
+	struct axes_spec_t {
+		// NOLINTBEGIN(misc-non-private-member-variables-in-classes)
+		ImAxis axis;
+		ImVec4 color;
+		data_dict_t &col;
+		// NOLINTEND(misc-non-private-member-variables-in-classes)
+	};
+
+	auto prepareAxes(std::vector<std::string> &assigned_plot_ids, std::vector<data_dict_t> &data,
+					 const std::vector<ImVec4> &color_map) -> std::vector<axes_spec_t> {
+		auto &app_state = AppState::getInstance();
+		if (app_state.global_x_link) {
+			ImPlot::SetNextAxisLinks(ImAxis_X1, &app_state.global_link.first, &app_state.global_link.second);
+		}
+
+		static constexpr auto axes = std::array{
+			ImAxis_Y1,
+			ImAxis_Y2,
+			ImAxis_Y3
+		};
+
+		ImPlot::SetupAxis(ImAxis_X1, "date", ImPlotAxisFlags_NoLabel);
+		ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Time);
+
+		const auto date_lims = [&]() {
+			if (app_state.global_x_link) {
+				return app_state.date_range;
+			}
+
+			return getXLims(data);
+		}();
+		ImPlot::SetupAxisLimits(ImAxis_X1, date_lims.first, date_lims.second, ImGuiCond_Once);
+
+		std::vector<axes_spec_t> axes_specs{};
+		axes_specs.reserve(3);
+
+		const auto old_assigned_plot_ids = assigned_plot_ids;
+		assigned_plot_ids.clear();
+
+		for (size_t i = 0; auto &col : data) {
+			if (!col.visible) {
+				continue;
+			}
+
+			if (col.timestamp.empty()) {
+				continue;
+			}
+
+			if (i > 3) {
+				break;
+			}
+
+			const auto axis = axes[i];
+
+			const axes_spec_t spec{.axis = axis, .color = color_map[i % color_map.size()], .col = col};
+			const auto is_new_data = i < old_assigned_plot_ids.size() ? old_assigned_plot_ids[i] != col.uuid : true;
+
+			ImPlot::SetupAxis(axis, col.name.c_str());
+			ImPlot::SetupAxisFormat(axis, getFormatString(col).c_str());
+
+			const auto data_lims = getPaddedYLims(col);
+			ImPlot::SetupAxisLimits(axis, data_lims.first, data_lims.second,
+									is_new_data ? ImGuiCond_Always : ImGuiCond_Once);
+
+			axes_specs.push_back(spec);
+			assigned_plot_ids.push_back(col.uuid);
+			++i;
+		}
+
+		return axes_specs;
+	}
+
+	auto doPlotSingle(const axes_spec_t &axis_spec) -> void {
+		const auto date_lims = [&]() {
+			auto &app_state = AppState::getInstance();
+			if (app_state.global_x_link) {
+				return app_state.date_range;
+			}
+
+			return getDateRange(axis_spec.col);
+		}();
+
+		ImPlot::SetAxis(axis_spec.axis);
+		plotSingleMesurement(axis_spec.col, axis_spec.color, date_lims);
+	}
+
+	auto doPlotSubplots(int current_pos, int n_selected, int col_count, data_dict_t &col, const ImVec4 &plot_color,
+						const std::pair<double, double> &window_date_range) -> void {
+		auto &app_state = AppState::getInstance();
 		const auto global_x_link = app_state.global_x_link;
 		double &global_link_min = app_state.global_link.first;
 		double &global_link_max = app_state.global_link.second;
@@ -418,18 +588,6 @@ namespace {
 		const auto inf_line_name = "##" + col.uuid + "inf_line";
 		if (ImPlot::BeginPlot(plot_title.c_str(), ImVec2(-1, 0),
 							  (n_selected < 1 ? ImPlotFlags_NoLegend : 0) | ImPlotFlags_NoTitle)) {
-			const auto fmt = [&col]() -> std::string {
-				if (col.unit.empty()) {
-					return "%g";
-				}
-
-				if (col.unit == "%") {
-					return "%g%%";
-				}
-
-				return "%g " + col.unit;
-			}();
-
 			const auto show_x_axis = [&]() -> bool {
 				if (current_pos >= n_selected - col_count) {
 					return true;
@@ -442,7 +600,7 @@ namespace {
 
 			ImPlot::SetupAxes("date", col.name.c_str(), x_axis_flags);
 			ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Time);
-			ImPlot::SetupAxisFormat(ImAxis_Y1, fmt.c_str());
+			ImPlot::SetupAxisFormat(ImAxis_Y1, getFormatString(col).c_str());
 
 			const auto date_range = [is_x_linked, global_x_link, current_subplot, &col, &global_link_min,
 									 &global_link_max]() {
@@ -461,74 +619,23 @@ namespace {
 			}();
 			ImPlot::SetupAxisLimits(ImAxis_X1, date_range.first, date_range.second, ImGuiCond_Once);
 
-			const auto limits = ImPlot::GetPlotLimits(ImAxis_X1);
-			const auto [start_index, stop_index] = getIndicesFromTimeRange(col.timestamp, limits.X);
-			const auto points_in_range = stop_index - start_index;
-			const auto reduction_factor =
-				std::clamp(fastCeil<size_t>(points_in_range, max_data_points), 1uz, std::numeric_limits<size_t>::max());
-			const auto reduction_factor_stepped = getNextReductionFactor(reduction_factor);
-
 			const auto date_lims = [&]() {
 				if (is_x_linked) {
 					if (global_x_link) {
 						return app_state.date_range;
 					}
-
+	
 					return window_date_range;
 				}
-
+	
 				return getDateRange(col);
 			}();
 
-			checkAggregate(col, reduction_factor_stepped);
-
-			const auto [start_index_agg, stop_index_agg] = getIndicesFromAggregate(col.aggregates, limits.X);
-			const auto count = [&]() -> int {
-				auto temp = stop_index_agg - start_index_agg + 1;
-				temp = std::clamp(temp, 0uz, col.aggregates.size());
-				return static_cast<int>(temp);
-			}();
-			const auto padded_count = count + 4;
-
-			plot_data_t plot_data{.data = &col,
-								  .reduction_factor = reduction_factor_stepped,
-								  .start_index = start_index_agg,
-								  .count = padded_count,
-								  .linked_date_range = date_lims};
+			plotSingleMesurement(col, plot_color, date_lims);
 
 			if (ImPlot::IsPlotHovered()) {
 				app_state.global_x_mouse_position =
 					ImPlot::GetCurrentPlot()->XAxis(0).PixelsToPlot(ImGui::GetIO().MousePos.x);
-			}
-			
-			switch (col.data_type) {
-				using enum data_type_t;
-				case BOOLEAN:
-					ImPlot::SetNextFillStyle(plot_color, 0.8f);
-					ImPlot::PlotDigitalG(col.name.c_str(), plotDict, &plot_data, padded_count);
-					break;
-				default:
-					ImPlot::SetNextLineStyle(plot_color);
-
-					if (reduction_factor > 1) {
-						const auto shaded_name = "##" + col.name + "##shaded";
-						ImPlot::PlotLineG(col.name.c_str(), plotDictMean, &plot_data, padded_count);
-						
-						if (reduction_factor >= 100) {
-							ImPlot::SetNextFillStyle(plot_color, 0.25f);
-							ImPlot::PlotShadedG(shaded_name.c_str(), plotDictStdMinus, &plot_data, plotDictStdPlus,
-												&plot_data, padded_count);
-
-						} else {
-							ImPlot::SetNextFillStyle(cursor_color, 0.25f);
-							ImPlot::PlotShadedG(shaded_name.c_str(), plotDictMin, &plot_data, plotDictMax, &plot_data,
-												padded_count);
-						}
-					} else {
-						ImPlot::PlotLineG(col.name.c_str(), plotDict, &plot_data, padded_count);
-					}
-
-					break;
 			}
 
 			if ((app_state.always_show_cursor || app_state.is_ctrl_pressed) &&
@@ -543,7 +650,8 @@ namespace {
 	}
 }  // namespace
 
-auto plotDataInSubplots(std::vector<data_dict_t> &data, const std::string &uuid) -> void {
+auto plotDataInSubplots(std::vector<data_dict_t> &data, const std::string &uuid,
+						std::vector<std::string> assigned_plot_ids) -> std::vector<std::string> {
 	const auto plot_size = ImGui::GetContentRegionAvail();
 
 	static auto data_filter = [](const auto &dct) { return dct.visible; };
@@ -552,7 +660,7 @@ auto plotDataInSubplots(std::vector<data_dict_t> &data, const std::string &uuid)
 		static_cast<int>(std::count_if(data.begin(), data.end(), data_filter));
 
 	if (n_selected == 0) {
-		return;
+		return {};
 	}
 
 	const auto [rows, cols] = [n_selected]() -> std::pair<int, int> {
@@ -571,8 +679,6 @@ auto plotDataInSubplots(std::vector<data_dict_t> &data, const std::string &uuid)
 	}
 
 	const auto subplot_id = "##" + uuid;
-	const auto subplot_flags =
-		(n_selected > 1 ? ImPlotSubplotFlags_ShareItems : 0) | (!global_x_link ? ImPlotSubplotFlags_LinkAllX : 0);
 
 	static const auto color_map = [&] -> std::vector<ImVec4> {
 		const auto n_colors = ImPlot::GetColormapSize();
@@ -586,18 +692,50 @@ auto plotDataInSubplots(std::vector<data_dict_t> &data, const std::string &uuid)
 		return colors;
 	}();
 
-	if (ImPlot::BeginSubplots(subplot_id.c_str(), rows, cols, plot_size, subplot_flags)) {
-		if (!global_x_link) {
-			fixSubplotRanges(data);
-		}
-
-		const auto window_date_range = getXLims(data);
-
-		for (int i = 0; auto &col : data | std::views::filter(data_filter)) {
-			doPlot(i, n_selected, cols, col, color_map[coerceCast<size_t>(i) % color_map.size()], window_date_range);
-			++i;
-		}
-
-		ImPlot::EndSubplots();
+	for (auto& col : data | std::views::filter(data_filter)) {
+		recalculateFitZoomRange(col);
 	}
+
+	if (app_state.always_use_subplots || n_selected > 2) {
+		const auto subplot_flags =
+			(n_selected > 1 ? ImPlotSubplotFlags_ShareItems : 0) | (!global_x_link ? ImPlotSubplotFlags_LinkAllX : 0);
+		
+			if (ImPlot::BeginSubplots(subplot_id.c_str(), rows, cols, plot_size, subplot_flags)) {
+			if (!global_x_link) {
+				fixSubplotRanges(data);
+			}
+
+			const auto window_date_range = getXLims(data);
+
+			for (int i = 0; auto &col : data | std::views::filter(data_filter)) {
+				doPlotSubplots(i, n_selected, cols, col, color_map[coerceCast<size_t>(i) % color_map.size()],
+							   window_date_range);
+				++i;
+			}
+
+			ImPlot::EndSubplots();
+		}
+	} else {
+		if (ImPlot::BeginPlot(subplot_id.c_str(), plot_size, ImPlotFlags_NoTitle)) {
+			for (const auto &e : prepareAxes(assigned_plot_ids, data, color_map)) {
+				doPlotSingle(e);
+			}
+
+			if (ImPlot::IsPlotHovered()) {
+				app_state.global_x_mouse_position =
+					ImPlot::GetCurrentPlot()->XAxis(0).PixelsToPlot(ImGui::GetIO().MousePos.x);
+			}
+
+			if (app_state.global_x_link && (app_state.always_show_cursor || app_state.is_ctrl_pressed)) {
+				const auto cursor_color = getCursorColor();
+				const auto inf_line_name = subplot_id + "inf_line";
+				ImPlot::SetNextLineStyle(cursor_color, 2.0f);
+				ImPlot::PlotInfLines(inf_line_name.c_str(), &app_state.global_x_mouse_position, 1);
+			}
+
+			ImPlot::EndPlot();
+		}
+	}
+
+	return assigned_plot_ids;
 }
