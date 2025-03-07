@@ -32,6 +32,7 @@
 #include "global_state.hpp"
 #include "imgui_extensions.hpp"
 #include "plotting.hpp"
+#include "raw_handling.hpp"
 #include "winapi.hpp"
 #include "window_context.hpp"
 
@@ -136,6 +137,14 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 			return EXIT_FAILURE;
 		}
 
+	}
+
+	const auto raw_files = parseRawFiles(commandline_paths);
+	const auto raw_data = getRawdata(raw_files.getEntries().front(), raw_stream_t::COE);
+
+	if (raw_data.empty()) {
+		spdlog::error("No data found in the file");
+		return -1;
 	}
 
 	std::list<WindowContext> window_contexts{};
@@ -334,11 +343,24 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 		updateDateRange(window_contexts);
 
+		ImGui::SetNextWindowDockID(dockspace, ImGuiCond_Once);
+		if (ImGui::Begin("test", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse)) {
+			static auto *raw_ctx = ImPlot::CreateContext();
+			ImPlot::SetCurrentContext(raw_ctx);
+			const auto window_content_size = ImGui::GetContentRegionAvail();
+			if (ImPlot::BeginPlot("test", window_content_size, ImPlotFlags_NoTitle)) {
+				ImPlot::SetupAxes("X", "Y", ImPlotAxisFlags_NoLabel | ImPlotAxisFlags_NoTickLabels);
+				ImPlot::PlotLine("test", raw_data.data(), static_cast<int>(raw_data.size()));
+				ImPlot::EndPlot();
+			}
+		}
+		ImGui::End();
+
 		for (auto &ctx : window_contexts) {
 			ctx.checkForFinishedLoading();
 			auto &dict = ctx.getData();
 			auto window_open = ctx.getWindowOpenRef();
-			
+
 			ImGui::SetNextWindowDockID(dockspace, ImGuiCond_Once);
 			ImGui::Begin(ctx.getWindowID().c_str(), &window_open,
 						 ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
@@ -401,11 +423,11 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 					ImGui::BeginChild("File content", ImVec2(window_content_size.x - 255, window_content_size.y));
 					ImGui::PushFont(getFont(fontList::ROBOTO_MONO_16));
-					
+
 					ctx.switchToImPlotContext();
 					const auto assigned_plot_ids = plotDataInSubplots(dict, ctx.getUUID(), ctx.getAssignedPlotIDs());
 					ctx.setAssignedPlotIDs(assigned_plot_ids);
-					
+
 					if (app_state.show_debug_menu) {
 						ImGui::PushID(ctx.getUUID().c_str());
 						ImPlot::ShowMetricsWindow();
