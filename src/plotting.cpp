@@ -511,7 +511,18 @@ namespace {
 
 			return getXLims(data);
 		}();
-		ImPlot::SetupAxisLimits(ImAxis_X1, date_lims.first, date_lims.second, ImGuiCond_Once);
+
+		const auto require_reset = [&app_state, &date_lims]() -> bool {
+			if (app_state.global_x_link) {
+				return false;
+			}
+
+			const auto current_x_lims = ImPlot::GetCurrentPlot()->Axes[ImAxis_X1].Range;
+			return current_x_lims.Max < date_lims.first || current_x_lims.Min > date_lims.second;
+		}();
+
+		ImPlot::SetupAxisLimits(ImAxis_X1, date_lims.first, date_lims.second,
+								require_reset ? ImGuiCond_Always : ImGuiCond_Once);
 
 		std::vector<axes_spec_t> axes_specs{};
 		axes_specs.reserve(3);
@@ -617,7 +628,19 @@ namespace {
 
 				return getDateRange(col);
 			}();
-			ImPlot::SetupAxisLimits(ImAxis_X1, date_range.first, date_range.second, ImGuiCond_Once);
+
+			const auto require_reset = [is_x_linked, global_x_link, n_selected, &col]() -> bool {
+				if (global_x_link || (is_x_linked && n_selected > 1)) {
+					return false;
+				}
+
+				const auto date_range = getDateRange(col);
+				const auto current_x_lims = ImPlot::GetCurrentPlot()->Axes[ImAxis_X1].Range;
+				return current_x_lims.Max < date_range.first || current_x_lims.Min > date_range.second;
+			}();
+
+			ImPlot::SetupAxisLimits(ImAxis_X1, date_range.first, date_range.second,
+									require_reset ? ImGuiCond_Always : ImGuiCond_Once);
 
 			const auto date_lims = [&]() {
 				if (is_x_linked) {
