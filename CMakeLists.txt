@@ -28,6 +28,7 @@ add_executable(spreadsheet_analyzer
 	src/about_screen.cpp
 	src/imgui_extensions.cpp
 	src/csv_handling.cpp
+	src/raw_handling.cpp
 	src/plotting.cpp
 	src/file_dialog.cpp
 	src/winapi.cpp
