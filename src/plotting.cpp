@@ -484,9 +484,9 @@ namespace {
 
 			const auto [start_index_agg, stop_index_agg] = getIndicesFromAggregate(col.aggregates, limits.X);
 			const auto count = [&]() -> int {
-				auto count = stop_index_agg - start_index_agg + 1;
-				count = std::clamp(count, 0uz, col.aggregates.size());
-				return static_cast<int>(count);
+				auto temp = stop_index_agg - start_index_agg + 1;
+				temp = std::clamp(temp, 0uz, col.aggregates.size());
+				return static_cast<int>(temp);
 			}();
 			const auto padded_count = count + 4;
 
