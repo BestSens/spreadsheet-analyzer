@@ -362,7 +362,8 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 					const auto subwindow_size = ImGui::GetContentRegionAvail();
 					if (ImGui::BeginListBox("##List Box", ImVec2(subwindow_size.x, subwindow_size.y))) {
 						for (auto &dct : dict) {
-							if (ImGui::Selectable(dct.name.c_str(), &dct.visible)) {
+							const auto list_id = dct.name + "##" + dct.uuid;
+							if (ImGui::Selectable(list_id.c_str(), &dct.visible)) {
 								if (app_state.is_ctrl_pressed) {
 									break;
 								}
