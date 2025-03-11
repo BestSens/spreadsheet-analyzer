@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <list>
 #include <ranges>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -91,6 +92,60 @@ namespace {
 		}
 	}
 
+	enum class agg_id_t : uint8_t {
+		mean,
+		stdevp,
+		stdevm
+	};
+
+	struct plot_data_t {
+		const std::vector<downsampled_data_t>* data;
+		raw_stream_t stream_id;
+		agg_id_t agg_id;
+	};
+
+	auto plotRaw(int i, void *data) -> ImPlotPoint {
+		assert(i >= 0);
+		assert(data != nullptr);
+
+		const auto &plot_data = *static_cast<plot_data_t*>(data);
+		const auto &data_set = *plot_data.data;
+
+		auto get_agg = [&plot_data](const auto &entry) -> double {
+			switch (plot_data.agg_id) {
+				case agg_id_t::mean:
+					return static_cast<double>(entry.mean);
+				case agg_id_t::stdevp:
+					return static_cast<double>(entry.mean + entry.stddev);
+				case agg_id_t::stdevm:
+					return static_cast<double>(entry.mean - entry.stddev);
+				default: break;
+			}
+
+			return std::numeric_limits<double>::quiet_NaN();
+		};
+
+		try {
+			const auto &date = data_set.at(static_cast<size_t>(i)).date;
+
+			switch (plot_data.stream_id) {
+				case raw_stream_t::AMPLITUDE:
+					return {date, get_agg(data_set.at(static_cast<size_t>(i)).amplitude)};
+				case raw_stream_t::RUNTIME:
+					return {date, get_agg(data_set.at(static_cast<size_t>(i)).runtime)};
+				case raw_stream_t::COE:
+					return {date, get_agg(data_set.at(static_cast<size_t>(i)).coe)};
+				case raw_stream_t::INT1:
+					return {date, get_agg(data_set.at(static_cast<size_t>(i)).int1)};
+				case raw_stream_t::INT2:
+					return {date, get_agg(data_set.at(static_cast<size_t>(i)).int2)};
+				default: break;
+			}
+		} catch (const std::exception &e) {}
+
+		return {std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::quiet_NaN()};
+	}
+
 	auto setSystemLocale() -> void {
 		try {
 			const auto locale = std::locale("");
@@ -103,7 +158,7 @@ namespace {
 
 #if defined(_WIN32)
 #ifndef DEBUG
-#pragma comment(linker, "/SUBSYSTEM:windows /ENTRY:mainCRTStartup")
+// #pragma comment(linker, "/SUBSYSTEM:windows /ENTRY:mainCRTStartup")
 #endif
 #endif
 auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognitive-complexity)
@@ -152,13 +207,11 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 	setSystemLocale();
 
 	const auto raw_files = parseRawFiles(commandline_paths);
-	const auto raw_data = getRawdata(raw_files.getEntries().front(), raw_stream_t::COE);
+	const auto raw_data =
+		getDownsampled(std::span{raw_files.getEntries()}, {raw_stream_t::COE, raw_stream_t::INT1, raw_stream_t::INT2},
+					   raw_files.getEntries().size());
 
-	if (raw_data.empty()) {
-		spdlog::error("No data found in the file");
-		return -1;
-	}
-
+	commandline_paths.clear();
 	std::list<WindowContext> window_contexts{};
 	WindowContext::window_contexts = &window_contexts;
 
@@ -357,10 +410,65 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 		if (ImGui::Begin("test", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse)) {
 			static auto *raw_ctx = ImPlot::CreateContext();
 			ImPlot::SetCurrentContext(raw_ctx);
+			ImPlot::GetStyle().UseLocalTime = false;
+			ImPlot::GetStyle().UseISO8601 = true;
+			ImPlot::GetStyle().Use24HourClock = true;
+
 			const auto window_content_size = ImGui::GetContentRegionAvail();
 			if (ImPlot::BeginPlot("test", window_content_size, ImPlotFlags_NoTitle)) {
-				ImPlot::SetupAxes("X", "Y", ImPlotAxisFlags_NoLabel | ImPlotAxisFlags_NoTickLabels);
-				ImPlot::PlotLine("test", raw_data.data(), static_cast<int>(raw_data.size()));
+				ImPlot::SetupAxis(ImAxis_X1, "date");
+				ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Time);
+				ImPlot::SetupAxis(ImAxis_Y1, "Int1");
+				ImPlot::SetupAxis(ImAxis_Y2, "Int2");
+				ImPlot::SetupAxis(ImAxis_Y3, "CoE");
+
+				ImPlot::SetAxis(ImAxis_Y1);
+
+				plot_data_t plot_data_mean{
+					.data = &raw_data,
+					.stream_id = raw_stream_t::INT1,
+					.agg_id = agg_id_t::mean
+				};
+
+				plot_data_t plot_data_stdevp{
+					.data = &raw_data,
+					.stream_id = raw_stream_t::INT1,
+					.agg_id = agg_id_t::stdevp
+				};
+
+				plot_data_t plot_data_stdevm{
+					.data = &raw_data,
+					.stream_id = raw_stream_t::INT1,
+					.agg_id = agg_id_t::stdevm
+				};
+
+				ImPlot::PlotLineG("Int1", plotRaw, &plot_data_mean, static_cast<int>(raw_data.size()));
+				ImPlot::SetNextFillStyle(ImPlot::GetLastItemColor(), 0.25f);
+				ImPlot::PlotShadedG("##Int1_shaded", plotRaw, &plot_data_stdevp, plotRaw, &plot_data_stdevm,
+									static_cast<int>(raw_data.size()));
+
+				ImPlot::SetAxis(ImAxis_Y2);
+
+				plot_data_mean.stream_id = raw_stream_t::INT2;
+				plot_data_stdevp.stream_id = raw_stream_t::INT2;
+				plot_data_stdevm.stream_id = raw_stream_t::INT2;
+
+				ImPlot::PlotLineG("Int2", plotRaw,  &plot_data_mean, static_cast<int>(raw_data.size()));
+				ImPlot::SetNextFillStyle(ImPlot::GetLastItemColor(), 0.25f);
+				ImPlot::PlotShadedG("##Int2_shaded", plotRaw, &plot_data_stdevp, plotRaw, &plot_data_stdevm,
+									static_cast<int>(raw_data.size()));
+
+				ImPlot::SetAxis(ImAxis_Y3);
+
+				plot_data_mean.stream_id = raw_stream_t::COE;
+				plot_data_stdevp.stream_id = raw_stream_t::COE;
+				plot_data_stdevm.stream_id = raw_stream_t::COE;
+
+				ImPlot::PlotLineG("CoE", plotRaw, &plot_data_mean, static_cast<int>(raw_data.size()));
+				ImPlot::SetNextFillStyle(ImPlot::GetLastItemColor(), 0.25f);
+				ImPlot::PlotShadedG("##CoE_shaded", plotRaw, &plot_data_stdevp, plotRaw, &plot_data_stdevm,
+									static_cast<int>(raw_data.size()));
+
 				ImPlot::EndPlot();
 			}
 		}

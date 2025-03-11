@@ -15,6 +15,7 @@
 #include "imgui_extensions.hpp"
 #include "implot.h"
 #include "implot_internal.h"
+#include "math_helpers.hpp"
 #include "spdlog/spdlog.h"
 #include "utility.hpp"
 #include "window_context.hpp"
@@ -46,24 +47,6 @@ namespace {
 		}
 
 		return getNextReductionFactor(dict.data->size() / static_cast<size_t>(max_points));
-	}
-
-	auto calcMax(std::span<const double> data) -> double {
-		return *std::ranges::max_element(data);
-	}
-
-	auto calcMin(std::span<const double> data) -> double {
-		return *std::ranges::min_element(data);
-	}
-
-	auto calcMean(std::span<const double> data) -> double {
-		return std::accumulate(data.begin(), data.end(), 0.0) / static_cast<double>(data.size());
-	}
-
-	auto calcStd(std::span<const double> data, double mean) -> double {
-		return std::sqrt(std::accumulate(data.begin(), data.end(), 0.0,
-										 [mean](const auto &a, const auto &b) { return a + (b - mean) * (b - mean); }) /
-						 static_cast<double>(data.size()));
 	}
 
 	auto getAggregatedPlotData(int i, void *data, auto fn) -> ImPlotPoint {
@@ -176,10 +159,10 @@ namespace {
 				const auto date_span = segment_date_span.subspan(i, count);
 
 				if (count >= 3) {
-					const auto mean = calcMean(value_span);
-					const auto stdev = calcStd(value_span, mean);
-					const auto min = calcMin(value_span);
-					const auto max = calcMax(value_span);
+					const auto mean = calcMean<double>(value_span);
+					const auto stdev = calcStd<double>(value_span, mean);
+					const auto min = calcMin<double>(value_span);
+					const auto max = calcMax<double>(value_span);
 
 					aggregates.push_back({.date = date_span.front(),
 										  .min = min,
@@ -224,14 +207,14 @@ namespace {
 				max_val = std::max(max_val, dict.data->at(i));
 				min_val = std::min(min_val, dict.data->at(i));
 			} else if (reduction_factor <= 100) {
-				const auto min = calcMin(std::span{*dict.data}.subspan(i, count));
-				const auto max = calcMax(std::span{*dict.data}.subspan(i, count));
+				const auto min = calcMin<double>(std::span{*dict.data}.subspan(i, count));
+				const auto max = calcMax<double>(std::span{*dict.data}.subspan(i, count));
 				
 				max_val = std::max(max_val, max);
 				min_val = std::min(min_val, min);
 			} else {
-				const auto mean = calcMean(std::span{*dict.data}.subspan(i, count));
-				const auto stdev = calcStd(std::span{*dict.data}.subspan(i, count), mean);
+				const auto mean = calcMean<double>(std::span{*dict.data}.subspan(i, count));
+				const auto stdev = calcStd<double>(std::span{*dict.data}.subspan(i, count), mean);
 				
 				max_val = std::max(max_val, mean + stdev);
 				min_val = std::min(min_val, mean - stdev);

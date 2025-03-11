@@ -1,6 +1,9 @@
 #pragma once
 
 #include <filesystem>
+#include <limits>
+#include <span>
+#include <unordered_map>
 #include <vector>
 
 enum class raw_type_t : uint8_t {
@@ -31,6 +34,28 @@ struct raw_data_entry_t {
 	float dt;
 };
 
+struct downsampled_entry_t {
+	float mean{};
+	float min{};
+	float max{};
+	float stddev{};
+};
+
+struct downsampled_data_t {
+	double date{};
+	downsampled_entry_t amplitude{};
+	downsampled_entry_t runtime{};
+	downsampled_entry_t coe{};
+	downsampled_entry_t int1{};
+	downsampled_entry_t int2{};
+};
+
+struct data_set_t {
+	time_t t0{};
+	float dt{std::numeric_limits<float>::quiet_NaN()};
+	std::unordered_map<raw_stream_t, std::vector<float>> data;
+};
+
 class RawDataHandler {
 public:
 	RawDataHandler() = default;
@@ -48,5 +73,10 @@ private:
 	std::vector<raw_data_entry_t> entries{};
 };
 
-auto getRawdata(const raw_data_entry_t& entry, [[maybe_unused]] raw_stream_t stream_id) -> std::vector<float>;
+auto getRawdata(const raw_data_entry_t& entry, const std::vector<raw_stream_t> &requested_stream_ids) -> data_set_t;
+auto getRawdata(const std::span<const raw_data_entry_t> &entries, const std::vector<raw_stream_t> &requested_stream_ids)
+	-> data_set_t;
+auto getDownsampled(const std::span<const raw_data_entry_t> &entries,
+					const std::vector<raw_stream_t> &requested_stream_ids, size_t reduction_factor)
+	-> std::vector<downsampled_data_t>;
 auto parseRawFiles(const std::vector<std::filesystem::path>& paths) -> RawDataHandler;
