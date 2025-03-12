@@ -88,6 +88,15 @@ namespace {
 			AppState::getInstance().date_range = {date_min, date_max};
 		}
 	}
+
+	auto setSystemLocale() -> void {
+		try {
+			const auto locale = std::locale("");
+			std::locale::global(locale);
+		} catch (const std::exception &e) {
+			spdlog::warn("Error setting system locale: {}", e.what());
+		}
+	}
 }  // namespace
 
 #if defined(_WIN32)
@@ -137,6 +146,8 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 		}
 
 	}
+
+	setSystemLocale();
 
 	std::list<WindowContext> window_contexts{};
 
