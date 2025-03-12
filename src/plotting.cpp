@@ -609,7 +609,7 @@ namespace {
 			const axes_spec_t spec{.axis = axis, .color = color_map[i % color_map.size()], .col = col};
 			const auto is_new_data = i < old_assigned_plot_ids.size() ? old_assigned_plot_ids[i] != col.uuid : true;
 
-			ImPlot::SetupAxis(axis, col.name.c_str());
+			ImPlot::SetupAxis(axis, col.name.c_str(), i % 2 != 0 ? ImPlotAxisFlags_Opposite : ImPlotAxisFlags_None);
 			ImPlot::SetupAxisFormat(axis, getFormatString(col).c_str());
 
 			const auto data_lims = getPaddedYLims(col);
