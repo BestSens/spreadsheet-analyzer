@@ -563,6 +563,24 @@ namespace {
 		return axes_specs;
 	}
 
+	auto drawCursor(const data_dict_t &col) -> void {
+		auto &app_state = AppState::getInstance();
+		const auto cursor_color = getCursorColor();
+		const auto inf_line_name = "##" + col.uuid + "inf_line";
+
+		if (ImPlot::IsPlotHovered()) {
+			app_state.global_x_mouse_position =
+				ImPlot::GetCurrentPlot()->XAxis(0).PixelsToPlot(ImGui::GetIO().MousePos.x);
+		}
+
+		if ((app_state.always_show_cursor || app_state.is_ctrl_pressed) &&
+			app_state.global_x_mouse_position >= static_cast<double>(col.timestamp.front()) &&
+			app_state.global_x_mouse_position <= static_cast<double>(col.timestamp.back())) {
+			ImPlot::SetNextLineStyle(cursor_color, 2.0f);
+			ImPlot::PlotInfLines(inf_line_name.c_str(), &app_state.global_x_mouse_position, 1);
+		}
+	}
+
 	auto doPlotSingle(const axes_spec_t &axis_spec) -> void {
 		const auto date_lims = [&]() {
 			auto &app_state = AppState::getInstance();
@@ -572,6 +590,8 @@ namespace {
 
 			return getDateRange(axis_spec.col);
 		}();
+
+		drawCursor(axis_spec.col);
 
 		ImPlot::SetAxis(axis_spec.axis);
 		plotSingleMesurement(axis_spec.col, axis_spec.color, date_lims);
@@ -593,10 +613,7 @@ namespace {
 			ImPlot::SetNextAxisLinks(ImAxis_X1, &global_link_min, &global_link_max);
 		}
 
-		const auto cursor_color = getCursorColor();
-
 		const auto plot_title = col.name + "##" + col.uuid;
-		const auto inf_line_name = "##" + col.uuid + "inf_line";
 		if (ImPlot::BeginPlot(plot_title.c_str(), ImVec2(-1, 0),
 							  (n_selected < 1 ? ImPlotFlags_NoLegend : 0) | ImPlotFlags_NoTitle)) {
 			const auto show_x_axis = [&]() -> bool {
@@ -656,17 +673,7 @@ namespace {
 
 			plotSingleMesurement(col, plot_color, date_lims);
 
-			if (ImPlot::IsPlotHovered()) {
-				app_state.global_x_mouse_position =
-					ImPlot::GetCurrentPlot()->XAxis(0).PixelsToPlot(ImGui::GetIO().MousePos.x);
-			}
-
-			if ((app_state.always_show_cursor || app_state.is_ctrl_pressed) &&
-				app_state.global_x_mouse_position >= static_cast<double>(col.timestamp.front()) &&
-				app_state.global_x_mouse_position <= static_cast<double>(col.timestamp.back())) {
-				ImPlot::SetNextLineStyle(cursor_color, 2.0f);
-				ImPlot::PlotInfLines(inf_line_name.c_str(), &app_state.global_x_mouse_position, 1);
-			}
+			drawCursor(col);
 
 			ImPlot::EndPlot();
 		}
@@ -742,18 +749,6 @@ auto plotDataInSubplots(std::vector<data_dict_t> &data, const std::string &uuid,
 		if (ImPlot::BeginPlot(subplot_id.c_str(), plot_size, ImPlotFlags_NoTitle)) {
 			for (const auto &e : prepareAxes(assigned_plot_ids, data, color_map)) {
 				doPlotSingle(e);
-			}
-
-			if (ImPlot::IsPlotHovered()) {
-				app_state.global_x_mouse_position =
-					ImPlot::GetCurrentPlot()->XAxis(0).PixelsToPlot(ImGui::GetIO().MousePos.x);
-			}
-
-			if (app_state.global_x_link && (app_state.always_show_cursor || app_state.is_ctrl_pressed)) {
-				const auto cursor_color = getCursorColor();
-				const auto inf_line_name = subplot_id + "inf_line";
-				ImPlot::SetNextLineStyle(cursor_color, 2.0f);
-				ImPlot::PlotInfLines(inf_line_name.c_str(), &app_state.global_x_mouse_position, 1);
 			}
 
 			ImPlot::EndPlot();
