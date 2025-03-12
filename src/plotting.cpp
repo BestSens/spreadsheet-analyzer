@@ -491,9 +491,6 @@ namespace {
 	auto prepareAxes(std::vector<std::string> &assigned_plot_ids, std::vector<data_dict_t> &data,
 					 const std::vector<ImVec4> &color_map) -> std::vector<axes_spec_t> {
 		auto &app_state = AppState::getInstance();
-		if (app_state.global_x_link) {
-			ImPlot::SetNextAxisLinks(ImAxis_X1, &app_state.global_link.first, &app_state.global_link.second);
-		}
 
 		static constexpr auto axes = std::array{
 			ImAxis_Y1,
@@ -746,6 +743,10 @@ auto plotDataInSubplots(std::vector<data_dict_t> &data, const std::string &uuid,
 			ImPlot::EndSubplots();
 		}
 	} else {
+		if (app_state.global_x_link) {
+			ImPlot::SetNextAxisLinks(ImAxis_X1, &app_state.global_link.first, &app_state.global_link.second);
+		}
+
 		if (ImPlot::BeginPlot(subplot_id.c_str(), plot_size, ImPlotFlags_NoTitle)) {
 			for (const auto &e : prepareAxes(assigned_plot_ids, data, color_map)) {
 				doPlotSingle(e);
