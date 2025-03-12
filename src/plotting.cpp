@@ -408,6 +408,68 @@ namespace {
 		return temp;
 	}
 
+	auto getValueOf(const data_dict_t &col, double position) -> std::pair<double, double> {
+		const auto it = std::ranges::lower_bound(col.timestamp, static_cast<time_t>(position));
+		if (it == col.timestamp.end()) {
+			return {col.timestamp.back(), col.data.back()};
+		}
+
+		const auto index = static_cast<size_t>(it - col.timestamp.begin());
+		if (index == 0) {
+			return {col.timestamp.front(), col.data.front()};
+		}
+
+		if (index > 0) {
+			const auto prev_index = index - 1;
+			const auto prev_time = static_cast<double>(col.timestamp[prev_index]);
+			const auto next_time = static_cast<double>(col.timestamp[index]);
+
+			if (position - prev_time < next_time - position) {
+				return {prev_time, col.data[prev_index]};
+			}
+		}
+
+		return {col.timestamp[index], col.data[index]};
+	}
+
+	auto getAnnotationOffset(const double &val_x, const double &val_y) -> ImVec2 {
+		const auto limits = ImPlot::GetPlotLimits(ImAxis_X1, ImPlot::GetCurrentPlot()->CurrentY);
+
+		const auto x_range = limits.X.Max - limits.X.Min;
+		const auto x_pos = (val_x - limits.X.Min) / x_range;
+		const auto y_range = limits.Y.Max - limits.Y.Min;
+		const auto y_pos = (val_y - limits.Y.Min) / y_range;
+
+		const auto is_right_bound = x_pos > 0.5;
+		const auto is_top_bound = y_pos > 0.5;
+
+		return {is_right_bound ? -15.0f : 15.0f, is_top_bound ? 15.0f : -15.0f};
+	}
+
+	auto drawTag(const data_dict_t &col, const ImVec4 &plot_color) -> void {
+		if (col.data_type != data_type_t::FLOAT) {
+			return;
+		}
+		
+		auto &app_state = AppState::getInstance();
+
+		if ((app_state.always_show_cursor || app_state.is_ctrl_pressed) &&
+			app_state.global_x_mouse_position >= static_cast<double>(col.timestamp.front()) &&
+			app_state.global_x_mouse_position <= static_cast<double>(col.timestamp.back())) {
+				const auto scatter_line_name = "##" + col.uuid + "scatter_line_y";
+				const auto [val_x, val_y] = getValueOf(col, app_state.global_x_mouse_position);
+
+				const auto value_string = fmt::format("{:g}{}{}", val_y, col.unit.empty() ? "" : " ", col.unit);				
+				const auto annotation_offset = getAnnotationOffset(val_x, val_y);
+
+				ImPlot::PushStyleVar(ImPlotStyleVar_FillAlpha, 0.25f);
+				ImPlot::SetNextMarkerStyle(ImPlotMarker_Square, 5.0f, plot_color, IMPLOT_AUTO, plot_color);
+				ImPlot::PlotScatter(scatter_line_name.c_str(), &val_x, &val_y, 1);
+				ImPlot::PopStyleVar();
+				ImPlot::Annotation(val_x, val_y, plot_color, annotation_offset, false, "%s", value_string.c_str());
+			}
+	}
+
 	auto plotSingleMesurement(data_dict_t &col, const ImVec4 &plot_color, const std::pair<double, double> &date_lims)
 		-> void {
 		auto &app_state = AppState::getInstance();
@@ -466,6 +528,8 @@ namespace {
 
 			break;
 		}
+
+		drawTag(col, plot_color);
 	}
 
 	auto getFormatString(const data_dict_t &col) -> std::string {
