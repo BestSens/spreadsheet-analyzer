@@ -17,6 +17,7 @@
 
 #include "csv.hpp"
 #include "dicts.hpp"
+#include "fast_float/fast_float.h"
 #include "spdlog/spdlog.h"
 #include "utility.hpp"
 #include "uuid_generator.hpp"
@@ -28,7 +29,6 @@ namespace {
 	};
 
 	auto parseDate(const std::string &str, size_t &prefered_fmt) -> time_t {
-		static const auto locale = std::locale("de_DE.utf-8");
 		std::istringstream ss{};
 
 		std::chrono::sys_seconds tp{};
@@ -39,7 +39,6 @@ namespace {
 			const auto &fmt = date_formats.at(index);
 			ss.clear();
 			ss.str(str);
-			ss.imbue(locale);
 			
 			ss >> std::chrono::parse(fmt, tp);
 
@@ -115,16 +114,13 @@ namespace {
 
 				for (size_t col = 0; const auto &col_name : col_names) {
 					try {
-						auto val = row[col_name].get<std::string>();
+						const auto val = row[col_name].get<std::string>();
+						double dbl_val{std::numeric_limits<double>::quiet_NaN()};
 
-						const auto pos = val.find(',');
-						if (pos != std::string::npos) {
-							val = val.replace(pos, 1, ".");
-						}
-
-						const auto dbl_val = std::stod(val);
-
-						if (std::isfinite(dbl_val)) {
+						static constexpr fast_float::parse_options options{fast_float::chars_format::general, ','};
+						const auto result =
+							fast_float::from_chars_advanced(val.data(), val.data() + val.size(), dbl_val, options);
+						if (result.ec == std::errc() && std::isfinite(dbl_val)) {
 							values[col_name].data.emplace_back(date, dbl_val);
 						}
 					} catch (const std::exception & e) {

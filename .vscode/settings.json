@@ -98,6 +98,7 @@
 		"variant": "cpp",
 		"resumable": "cpp",
 		"future": "cpp",
-		"string_view": "cpp"
+		"string_view": "cpp",
+		"cinttypes": "cpp"
 	}
 }

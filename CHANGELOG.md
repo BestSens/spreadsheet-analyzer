@@ -6,6 +6,7 @@
 * automatically rescale x axis when changing to another measurement which time range is completely out of view
 * add scrollbar to measurement list box
 * fix id error when column is present in data set with and without a unit specified
+* fix floating point parsing on some locales
 
 ## 1.0.0 (05.03.2025)
 * initial release

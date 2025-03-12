@@ -32,6 +32,7 @@ namespace {
 		Library{"SDL_image", "libsdl-org", "https://github.com/libsdl-org/SDL_image"},
 		Library{"expected", "TartanLlama", "https://github.com/TartanLlama/expected"},
 		Library{"roboto", "google", "https://fonts.google.com/specimen/Roboto"},
+		Library{"fast_float", "fastfloat", "https://github.com/fastfloat/fast_float"}
 	};
 }
 
