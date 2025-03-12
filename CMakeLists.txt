@@ -65,6 +65,7 @@ include(add_cxxopts)
 include(nativefiledialog-extended)
 include(expected)
 include(uuid)
+include(fontawesome)
 include(roboto_sans)
 include(roboto_mono)
 include(compiler_warnings)
@@ -103,6 +104,7 @@ target_link_libraries(spreadsheet_analyzer PRIVATE
 
 	roboto_sans
 	roboto_mono
+	fontawesome
 )
 target_include_directories(spreadsheet_analyzer PRIVATE ${OPENGL_INCLUDE_DIR})
 

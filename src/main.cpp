@@ -34,6 +34,7 @@
 #include "plotting.hpp"
 #include "winapi.hpp"
 #include "window_context.hpp"
+#include "IconsFontAwesome6.h"
 
 extern "C" const unsigned char icon_data[];
 extern "C" const size_t icon_data_size;
@@ -352,10 +353,22 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 			
 			ImGui::SetNextWindowDockID(dockspace, ImGuiCond_Once);
 			ImGui::Begin(ctx.getWindowID().c_str(), &window_open,
-						 ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+						 ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_MenuBar);
+
+			const auto loading_status = ctx.getLoadingStatus();
+
+			if (ImGui::BeginMenuBar()) {
+				if (ImGui::MenuItem(ICON_FA_CLONE, nullptr, nullptr, !loading_status.is_loading)) {
+					window_contexts.push_back(ctx);
+				}
+
+				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+					ImGui::SetTooltip("Duplicate");
+				}
+				ImGui::EndMenuBar();
+			}
 
 			const auto window_content_size = ImGui::GetContentRegionAvail();
-			const auto loading_status = ctx.getLoadingStatus();
 
 			if (loading_status.is_loading) {
 				const auto progress = static_cast<float>(loading_status.finished_files) /

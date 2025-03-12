@@ -39,8 +39,15 @@ public:
 		}
 	}
 
-	WindowContext(const WindowContext &) = delete;
-	auto operator=(const WindowContext &) -> WindowContext & = delete;
+	WindowContext(const WindowContext &other) : data{other.data}, window_title{other.window_title} {};
+	auto operator=(const WindowContext &other) -> WindowContext & {
+		if (this != &other) {
+			this->data = other.data;
+			this->window_title = other.window_title;
+		}
+
+		return *this;
+	};
 
 	WindowContext(WindowContext &&other) noexcept
 		: data(std::move(other.data)),
