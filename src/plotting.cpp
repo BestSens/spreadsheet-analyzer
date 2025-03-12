@@ -450,7 +450,7 @@ namespace {
 		if (col.data_type != data_type_t::FLOAT) {
 			return;
 		}
-		
+
 		auto &app_state = AppState::getInstance();
 
 		if ((app_state.always_show_cursor || app_state.is_ctrl_pressed) &&
@@ -600,7 +600,7 @@ namespace {
 				continue;
 			}
 
-			if (i > 3) {
+			if (i >= axes.size()) {
 				break;
 			}
 
@@ -637,7 +637,7 @@ namespace {
 		if ((app_state.always_show_cursor || app_state.is_ctrl_pressed) &&
 			app_state.global_x_mouse_position >= static_cast<double>(col.timestamp.front()) &&
 			app_state.global_x_mouse_position <= static_cast<double>(col.timestamp.back())) {
-			ImPlot::SetNextLineStyle(cursor_color, 2.0f);
+			ImPlot::SetNextLineStyle(cursor_color, 1.0f);
 			ImPlot::PlotInfLines(inf_line_name.c_str(), &app_state.global_x_mouse_position, 1);
 		}
 	}
