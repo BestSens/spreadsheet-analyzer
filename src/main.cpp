@@ -76,12 +76,12 @@ namespace {
 					continue;
 				}
 
-				if (e.timestamp.empty()) {
+				if (e.timestamp->empty()) {
 					continue;
 				}
 
-				date_min = std::min(date_min, static_cast<double>(e.timestamp.front()));
-				date_max = std::max(date_max, static_cast<double>(e.timestamp.back()));
+				date_min = std::min(date_min, static_cast<double>(e.timestamp->front()));
+				date_max = std::max(date_max, static_cast<double>(e.timestamp->back()));
 			}
 		}
 

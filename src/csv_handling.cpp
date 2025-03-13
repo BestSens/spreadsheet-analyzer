@@ -268,8 +268,8 @@ auto loadCSVs(const std::vector<std::filesystem::path> &paths, size_t &finished,
 		bool is_boolean = true;
 
 		for (const auto &[date, val] : value.data) {
-			dd.timestamp.push_back(date);
-			dd.data.push_back(val);
+			dd.timestamp->push_back(date);
+			dd.data->push_back(val);
 
 			if (val != 0 && val != 1) {
 				is_boolean = false;
@@ -279,10 +279,10 @@ auto loadCSVs(const std::vector<std::filesystem::path> &paths, size_t &finished,
 		dd.data_type = is_boolean ? data_type_t::BOOLEAN : data_type_t::FLOAT;
 
 		std::vector<time_t> time_deltas{};
-		time_deltas.reserve(dd.timestamp.size() - 1);
+		time_deltas.reserve(dd.timestamp->size() - 1);
 
-		for (size_t i = 1; i < dd.timestamp.size(); ++i) {
-			time_deltas.push_back(dd.timestamp[i] - dd.timestamp[i - 1]);
+		for (size_t i = 1; i < dd.timestamp->size(); ++i) {
+			time_deltas.push_back(dd.timestamp->at(i) - dd.timestamp->at(i - 1));
 		}
 
 		dd.delta_t = calculateMedian(time_deltas);

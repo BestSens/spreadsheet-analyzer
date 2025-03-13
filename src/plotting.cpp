@@ -44,7 +44,7 @@ namespace {
 			return 1;
 		}
 
-		return getNextReductionFactor(dict.data.size() / static_cast<size_t>(max_points));
+		return getNextReductionFactor(dict.data->size() / static_cast<size_t>(max_points));
 	}
 
 	auto calcMax(std::span<const double> data) -> double {
@@ -154,16 +154,16 @@ namespace {
 	}
 
 	auto calculateAggregates(const data_dict_t &dict, size_t reduction_factor) -> std::vector<data_aggregate_t> {
-		const auto segments = createSegments(std::span{dict.timestamp}, dict.delta_t * 10);
+		const auto segments = createSegments(std::span{*dict.timestamp}, dict.delta_t * 10);
 
 		std::vector<data_aggregate_t> aggregates{};
-		aggregates.reserve((dict.data.size() / reduction_factor) + segments.size() + 1);
+		aggregates.reserve((dict.data->size() / reduction_factor) + segments.size() + 1);
 
 		for (const auto& segment: segments) {
 			const auto segment_value_span =
-				std::span{dict.data}.subspan(segment.first, segment.second - segment.first + 1);
+				std::span{*dict.data}.subspan(segment.first, segment.second - segment.first + 1);
 			const auto segment_date_span =
-				std::span{dict.timestamp}.subspan(segment.first, segment.second - segment.first + 1);
+				std::span{*dict.timestamp}.subspan(segment.first, segment.second - segment.first + 1);
 
 			for (size_t i = 0; i < segment_value_span.size(); i += reduction_factor) {
 				if (i >= segment_value_span.size()) {
@@ -212,25 +212,25 @@ namespace {
 		auto max_val = std::numeric_limits<double>::lowest();
 		auto min_val = std::numeric_limits<double>::max();
 
-		for (size_t i = 0; i < dict.data.size(); i += reduction_factor) {
-			if (i >= dict.data.size()) {
+		for (size_t i = 0; i < dict.data->size(); i += reduction_factor) {
+			if (i >= dict.data->size()) {
 				break;
 			}
 
-			const auto count = std::min(reduction_factor, dict.data.size() - i);
+			const auto count = std::min(reduction_factor, dict.data->size() - i);
 
 			if (reduction_factor == 1) {
-				max_val = std::max(max_val, dict.data[i]);
-				min_val = std::min(min_val, dict.data[i]);
+				max_val = std::max(max_val, dict.data->at(i));
+				min_val = std::min(min_val, dict.data->at(i));
 			} else if (reduction_factor <= 100) {
-				const auto min = calcMin(std::span{dict.data}.subspan(i, count));
-				const auto max = calcMax(std::span{dict.data}.subspan(i, count));
+				const auto min = calcMin(std::span{*dict.data}.subspan(i, count));
+				const auto max = calcMax(std::span{*dict.data}.subspan(i, count));
 				
 				max_val = std::max(max_val, max);
 				min_val = std::min(min_val, min);
 			} else {
-				const auto mean = calcMean(std::span{dict.data}.subspan(i, count));
-				const auto stdev = calcStd(std::span{dict.data}.subspan(i, count), mean);
+				const auto mean = calcMean(std::span{*dict.data}.subspan(i, count));
+				const auto stdev = calcStd(std::span{*dict.data}.subspan(i, count), mean);
 				
 				max_val = std::max(max_val, mean + stdev);
 				min_val = std::min(min_val, mean - stdev);
@@ -263,12 +263,12 @@ namespace {
 	}
 
 	auto getDateRange(const data_dict_t &data) -> std::pair<double, double> {
-		if (data.timestamp.empty()) {
+		if (data.timestamp->empty()) {
 			return {0, 0};
 		}
 
-		const auto date_min = static_cast<double>(data.timestamp.front());
-		const auto date_max = static_cast<double>(data.timestamp.back());
+		const auto date_min = static_cast<double>(data.timestamp->front());
+		const auto date_max = static_cast<double>(data.timestamp->back());
 
 		const auto padding_percent = ImPlot::GetStyle().FitPadding.x;
 		const auto full_range = date_max - date_min;
@@ -325,12 +325,12 @@ namespace {
 				continue;
 			}
 
-			if (col.timestamp.empty()) {
+			if (col.timestamp->empty()) {
 				continue;
 			}
 
-			date_min = std::min(date_min, col.timestamp.front());
-			date_max = std::max(date_max, col.timestamp.back());
+			date_min = std::min(date_min, col.timestamp->front());
+			date_max = std::max(date_max, col.timestamp->back());
 		}
 
 		return {static_cast<double>(date_min), static_cast<double>(date_max)};
@@ -374,12 +374,12 @@ namespace {
 				continue;
 			}
 
-			if (col.timestamp.empty()) {
+			if (col.timestamp->empty()) {
 				continue;
 			}
 
-			data_min = std::min(data_min, *std::ranges::min_element(col.data));
-			data_max = std::max(data_max, *std::ranges::max_element(col.data));
+			data_min = std::min(data_min, *std::ranges::min_element(*col.data));
+			data_max = std::max(data_max, *std::ranges::max_element(*col.data));
 		}
 
 		for (auto &col_link_data : subplot->ColLinkData) {
@@ -409,27 +409,27 @@ namespace {
 	}
 
 	auto getValueOf(const data_dict_t &col, double position) -> std::pair<double, double> {
-		const auto it = std::ranges::lower_bound(col.timestamp, static_cast<time_t>(position));
-		if (it == col.timestamp.end()) {
-			return {col.timestamp.back(), col.data.back()};
+		const auto it = std::ranges::lower_bound(*col.timestamp, static_cast<time_t>(position));
+		if (it == col.timestamp->end()) {
+			return {col.timestamp->back(), col.data->back()};
 		}
 
-		const auto index = static_cast<size_t>(it - col.timestamp.begin());
+		const auto index = static_cast<size_t>(it - col.timestamp->begin());
 		if (index == 0) {
-			return {col.timestamp.front(), col.data.front()};
+			return {col.timestamp->front(), col.data->front()};
 		}
 
 		if (index > 0) {
 			const auto prev_index = index - 1;
-			const auto prev_time = static_cast<double>(col.timestamp[prev_index]);
-			const auto next_time = static_cast<double>(col.timestamp[index]);
+			const auto prev_time = static_cast<double>(col.timestamp->at(prev_index));
+			const auto next_time = static_cast<double>(col.timestamp->at(index));
 
 			if (position - prev_time < next_time - position) {
-				return {prev_time, col.data[prev_index]};
+				return {prev_time, col.data->at(prev_index)};
 			}
 		}
 
-		return {col.timestamp[index], col.data[index]};
+		return {col.timestamp->at(index), col.data->at(index)};
 	}
 
 	auto getAnnotationOffset(const double &val_x, const double &val_y) -> ImVec2 {
@@ -454,8 +454,8 @@ namespace {
 		auto &app_state = AppState::getInstance();
 
 		if ((app_state.always_show_cursor || app_state.is_ctrl_pressed) &&
-			app_state.global_x_mouse_position >= static_cast<double>(col.timestamp.front()) &&
-			app_state.global_x_mouse_position <= static_cast<double>(col.timestamp.back())) {
+			app_state.global_x_mouse_position >= static_cast<double>(col.timestamp->front()) &&
+			app_state.global_x_mouse_position <= static_cast<double>(col.timestamp->back())) {
 				const auto scatter_line_name = "##" + col.uuid + "scatter_line_y";
 				const auto [val_x, val_y] = getValueOf(col, app_state.global_x_mouse_position);
 
@@ -476,7 +476,7 @@ namespace {
 		const auto max_data_points = static_cast<size_t>(std::max(app_state.max_data_points, 1));
 		
 		const auto limits = ImPlot::GetPlotLimits(ImAxis_X1);
-		const auto [start_index, stop_index] = getIndicesFromTimeRange(col.timestamp, limits.X);
+		const auto [start_index, stop_index] = getIndicesFromTimeRange(*col.timestamp, limits.X);
 		const auto points_in_range = stop_index - start_index;
 		const auto reduction_factor =
 			std::clamp(fastCeil<size_t>(points_in_range, max_data_points), 1uz, std::numeric_limits<size_t>::max());
@@ -596,7 +596,7 @@ namespace {
 				continue;
 			}
 
-			if (col.timestamp.empty()) {
+			if (col.timestamp->empty()) {
 				continue;
 			}
 
@@ -635,8 +635,8 @@ namespace {
 		}
 
 		if ((app_state.always_show_cursor || app_state.is_ctrl_pressed) &&
-			app_state.global_x_mouse_position >= static_cast<double>(col.timestamp.front()) &&
-			app_state.global_x_mouse_position <= static_cast<double>(col.timestamp.back())) {
+			app_state.global_x_mouse_position >= static_cast<double>(col.timestamp->front()) &&
+			app_state.global_x_mouse_position <= static_cast<double>(col.timestamp->back())) {
 			ImPlot::SetNextLineStyle(cursor_color, 1.0f);
 			ImPlot::PlotInfLines(inf_line_name.c_str(), &app_state.global_x_mouse_position, 1);
 		}

@@ -2,6 +2,7 @@
 
 #include <ctime>
 #include <limits>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -26,9 +27,9 @@ struct data_dict_t {
 	bool visible{false};
 	data_type_t data_type{data_type_t::FLOAT};
 
-	std::vector<time_t> timestamp{};
+	std::shared_ptr<std::vector<time_t>> timestamp{std::make_shared<std::vector<time_t>>()};
 	time_t delta_t{};
-	std::vector<double> data{};
+	std::shared_ptr<std::vector<double>> data{std::make_shared<std::vector<double>>()};
 
 	size_t aggregated_to{0};
 	std::vector<data_aggregate_t> aggregates{};
