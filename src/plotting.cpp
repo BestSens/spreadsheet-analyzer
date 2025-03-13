@@ -17,6 +17,7 @@
 #include "implot_internal.h"
 #include "spdlog/spdlog.h"
 #include "utility.hpp"
+#include "window_context.hpp"
 
 namespace {
 	struct plot_data_t {
@@ -570,7 +571,7 @@ namespace {
 				return app_state.date_range;
 			}
 
-			return getXLims(data);
+			return getPaddedXLims(data);
 		}();
 
 		const auto require_reset = [&]() -> bool {
@@ -740,17 +741,18 @@ namespace {
 	}
 }  // namespace
 
-auto plotDataInSubplots(std::vector<data_dict_t> &data, const std::string &uuid,
-						std::vector<std::string> assigned_plot_ids, bool is_x_linked) -> std::vector<std::string> {
+auto plotDataInSubplots(WindowContext &window_context) -> void {
 	const auto plot_size = ImGui::GetContentRegionAvail();
 
 	static auto data_filter = [](const auto &dct) { return dct.visible; };
+
+	auto &data = window_context.getData();
 
 	const auto n_selected =
 		static_cast<int>(std::count_if(data.begin(), data.end(), data_filter));
 
 	if (n_selected == 0) {
-		return {};
+		return;
 	}
 
 	const auto [rows, cols] = [n_selected]() -> std::pair<int, int> {
@@ -763,11 +765,12 @@ auto plotDataInSubplots(std::vector<data_dict_t> &data, const std::string &uuid,
 
 	auto& app_state = AppState::getInstance();
 
-	if (is_x_linked && (std::isnan(app_state.global_link.first) || std::isnan(app_state.global_link.second))) {
+	if (window_context.getForceSubplot() &&
+		(std::isnan(app_state.global_link.first) || std::isnan(app_state.global_link.second))) {
 		app_state.global_link = getPaddedXLims(data);
 	}
 
-	const auto subplot_id = "##" + uuid;
+	const auto subplot_id = "##" + window_context.getUUID();
 
 	static const auto color_map = [&] -> std::vector<ImVec4> {
 		const auto n_colors = ImPlot::GetColormapSize();
@@ -785,7 +788,9 @@ auto plotDataInSubplots(std::vector<data_dict_t> &data, const std::string &uuid,
 		recalculateFitZoomRange(col);
 	}
 
-	if (app_state.always_use_subplots || n_selected > 2) {
+	const auto is_x_linked = window_context.getGlobalXLink();
+
+	if (window_context.getForceSubplot() || n_selected > 2) {
 		const auto subplot_flags =
 			(n_selected > 1 ? ImPlotSubplotFlags_ShareItems : 0) | (!is_x_linked ? ImPlotSubplotFlags_LinkAllX : 0);
 		
@@ -810,13 +815,11 @@ auto plotDataInSubplots(std::vector<data_dict_t> &data, const std::string &uuid,
 		}
 
 		if (ImPlot::BeginPlot(subplot_id.c_str(), plot_size, ImPlotFlags_NoTitle)) {
-			for (const auto &e : prepareAxes(assigned_plot_ids, data, color_map, is_x_linked)) {
+			for (const auto &e : prepareAxes(window_context.getAssignedPlotIDsRef(), data, color_map, is_x_linked)) {
 				doPlotSingle(e, is_x_linked);
 			}
 
 			ImPlot::EndPlot();
 		}
 	}
-
-	return assigned_plot_ids;
 }

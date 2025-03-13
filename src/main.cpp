@@ -304,8 +304,6 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 			if (ImGui::BeginMenu("Settings")) {
 				ImGui::MenuItem("Always show date cursor", nullptr, &app_state.always_show_cursor);
 				ImGui::Separator();
-				ImGui::MenuItem("Always use subplots", nullptr, &app_state.always_use_subplots);
-				ImGui::Separator();
 				ImGui::InputInt("Max displayed data points", &app_state.max_data_points, 100, 1'000);
 				ImGui::EndMenu();
 			}
@@ -358,14 +356,23 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 			if (ImGui::BeginMenuBar()) {
 				bool &global_x_link = ctx.getGlobalXLinkRef();
+				
 				ImGui::MenuItem(global_x_link ? ICON_FA_LINK_SLASH : ICON_FA_LINK, nullptr, &global_x_link);
-
+				
 				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
 					if (global_x_link) {
 						ImGui::SetTooltip("Unlink x-axes");
 					} else {
 						ImGui::SetTooltip("Link x-axes");
 					}
+				}
+
+				bool &force_subplot = ctx.getForceSubplotRef();
+
+				ImGui::MenuItem(ICON_FA_TABLE_LIST, nullptr, &force_subplot);
+				
+				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+					ImGui::SetTooltip("Force subplots");
 				}
 
 				if (ImGui::MenuItem(ICON_FA_CLONE, nullptr, nullptr, !loading_status.is_loading)) {
@@ -438,9 +445,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 					ImGui::PushFont(getFont(fontList::ROBOTO_MONO_16));
 					
 					ctx.switchToImPlotContext();
-					const auto assigned_plot_ids =
-						plotDataInSubplots(dict, ctx.getUUID(), ctx.getAssignedPlotIDs(), ctx.getGlobalXLinkRef());
-					ctx.setAssignedPlotIDs(assigned_plot_ids);
+					plotDataInSubplots(ctx);
 					
 					if (app_state.show_debug_menu) {
 						ImGui::PushID(ctx.getUUID().c_str());

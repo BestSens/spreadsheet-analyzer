@@ -28,7 +28,6 @@ public:
 	double global_x_mouse_position{std::numeric_limits<double>::quiet_NaN()};
 
 	bool always_show_cursor{true};
-	bool always_use_subplots{false};
 	
 	bool is_ctrl_pressed{false};
 	bool is_shift_pressed{false};

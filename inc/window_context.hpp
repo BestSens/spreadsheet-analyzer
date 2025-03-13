@@ -111,6 +111,18 @@ public:
 		return this->global_x_link;
 	}
 
+	auto getGlobalXLink() const -> bool {
+		return this->global_x_link;
+	}
+
+	auto getForceSubplotRef() -> bool & {
+		return this->force_subplot;
+	}
+
+	auto getForceSubplot() const -> bool {
+		return this->force_subplot;
+	}
+
 	[[nodiscard]] auto isScheduledForDeletion() const -> bool {
 		return this->scheduled_for_deletion;
 	}
@@ -185,6 +197,10 @@ public:
 		return this->assigned_plot_ids;
 	}
 
+	[[nodiscard]] auto getAssignedPlotIDsRef() -> std::vector<std::string> & {
+		return this->assigned_plot_ids;
+	}
+
 	auto setAssignedPlotIDs(const std::vector<std::string> &ids) -> void {
 		this->assigned_plot_ids = ids;
 	}
@@ -208,6 +224,7 @@ private:
 	bool window_open{true};
 	bool scheduled_for_deletion{false};
 	bool global_x_link{false};
+	bool force_subplot{false};
 	std::future<std::vector<data_dict_t>> data_dict_f{};
 
 	// should be fine to use these without locking as they are only written on one thread
