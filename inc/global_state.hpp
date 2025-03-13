@@ -27,7 +27,6 @@ public:
 										 std::numeric_limits<double>::quiet_NaN()};
 	double global_x_mouse_position{std::numeric_limits<double>::quiet_NaN()};
 
-	bool global_x_link{false};
 	bool always_show_cursor{true};
 	bool always_use_subplots{false};
 	

@@ -55,7 +55,8 @@ public:
 	WindowContext(WindowContext &&other) noexcept
 		: data(std::move(other.data)),
 		  window_open(other.window_open),
-		  scheduled_for_deletion(other.scheduled_for_deletion) {
+		  scheduled_for_deletion(other.scheduled_for_deletion),
+		  global_x_link(other.global_x_link) {
 		std::swap(this->implot_context, other.implot_context);
 		std::swap(this->finished_files, other.finished_files);
 		std::swap(this->stop_loading, other.stop_loading);
@@ -71,6 +72,7 @@ public:
 			this->data = std::move(other.data);
 			this->window_open = other.window_open;
 			this->scheduled_for_deletion = other.scheduled_for_deletion;
+			this->global_x_link = other.global_x_link;
 
 			std::swap(this->implot_context, other.implot_context);
 			std::swap(this->finished_files, other.finished_files);
@@ -103,6 +105,10 @@ public:
 
 	auto getWindowOpenRef() -> bool & {
 		return this->window_open;
+	}
+
+	auto getGlobalXLinkRef() -> bool & {
+		return this->global_x_link;
 	}
 
 	[[nodiscard]] auto isScheduledForDeletion() const -> bool {
@@ -201,6 +207,7 @@ private:
 	std::vector<data_dict_t> data{};
 	bool window_open{true};
 	bool scheduled_for_deletion{false};
+	bool global_x_link{false};
 	std::future<std::vector<data_dict_t>> data_dict_f{};
 
 	// should be fine to use these without locking as they are only written on one thread

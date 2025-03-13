@@ -553,7 +553,7 @@ namespace {
 	};
 
 	auto prepareAxes(std::vector<std::string> &assigned_plot_ids, std::vector<data_dict_t> &data,
-					 const std::vector<ImVec4> &color_map) -> std::vector<axes_spec_t> {
+					 const std::vector<ImVec4> &color_map, const bool is_x_linked) -> std::vector<axes_spec_t> {
 		auto &app_state = AppState::getInstance();
 
 		static constexpr auto axes = std::array{
@@ -566,15 +566,15 @@ namespace {
 		ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Time);
 
 		const auto date_lims = [&]() {
-			if (app_state.global_x_link) {
+			if (is_x_linked) {
 				return app_state.date_range;
 			}
 
 			return getXLims(data);
 		}();
 
-		const auto require_reset = [&app_state, &date_lims]() -> bool {
-			if (app_state.global_x_link) {
+		const auto require_reset = [&]() -> bool {
+			if (is_x_linked) {
 				return false;
 			}
 
@@ -642,10 +642,10 @@ namespace {
 		}
 	}
 
-	auto doPlotSingle(const axes_spec_t &axis_spec) -> void {
+	auto doPlotSingle(const axes_spec_t &axis_spec, bool is_x_linked) -> void {
 		const auto date_lims = [&]() {
-			auto &app_state = AppState::getInstance();
-			if (app_state.global_x_link) {
+			if (is_x_linked) {
+				auto &app_state = AppState::getInstance();
 				return app_state.date_range;
 			}
 
@@ -659,18 +659,17 @@ namespace {
 	}
 
 	auto doPlotSubplots(int current_pos, int n_selected, int col_count, data_dict_t &col, const ImVec4 &plot_color,
-						const std::pair<double, double> &window_date_range) -> void {
+						const std::pair<double, double> &window_date_range, bool is_x_global_linked) -> void {
 		auto &app_state = AppState::getInstance();
-		const auto global_x_link = app_state.global_x_link;
 		double &global_link_min = app_state.global_link.first;
 		double &global_link_max = app_state.global_link.second;
 
 		const auto *current_subplot = ImPlot::GetCurrentContext()->CurrentSubplot;
 		const auto current_flags = current_subplot->Flags;
-		const auto is_x_linked = global_x_link || (current_flags & ImPlotSubplotFlags_LinkAllX) != 0 ||
+		const auto is_x_linked = is_x_global_linked || (current_flags & ImPlotSubplotFlags_LinkAllX) != 0 ||
 								 (current_flags & ImPlotSubplotFlags_LinkCols) != 0;
 
-		if (global_x_link) {
+		if (is_x_global_linked) {
 			ImPlot::SetNextAxisLinks(ImAxis_X1, &global_link_min, &global_link_max);
 		}
 
@@ -682,7 +681,7 @@ namespace {
 					return true;
 				}
 
-				return (!is_x_linked && !global_x_link);
+				return (!is_x_linked && !is_x_global_linked);
 			}();
 
 			const auto x_axis_flags = (!show_x_axis ? ImPlotAxisFlags_NoTickLabels : 0) | ImPlotAxisFlags_NoLabel;
@@ -691,10 +690,10 @@ namespace {
 			ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Time);
 			ImPlot::SetupAxisFormat(ImAxis_Y1, getFormatString(col).c_str());
 
-			const auto date_range = [is_x_linked, global_x_link, current_subplot, &col, &global_link_min,
+			const auto date_range = [is_x_linked, is_x_global_linked, current_subplot, &col, &global_link_min,
 									 &global_link_max]() {
 				if (is_x_linked) {
-					if (global_x_link) {
+					if (is_x_global_linked) {
 						return std::pair{global_link_min, global_link_max};
 					}
 
@@ -707,8 +706,8 @@ namespace {
 				return getDateRange(col);
 			}();
 
-			const auto require_reset = [is_x_linked, global_x_link, n_selected, &col]() -> bool {
-				if (global_x_link || (is_x_linked && n_selected > 1)) {
+			const auto require_reset = [is_x_linked, is_x_global_linked, n_selected, &col]() -> bool {
+				if (is_x_global_linked || (is_x_linked && n_selected > 1)) {
 					return false;
 				}
 
@@ -722,7 +721,7 @@ namespace {
 
 			const auto date_lims = [&]() {
 				if (is_x_linked) {
-					if (global_x_link) {
+					if (is_x_global_linked) {
 						return app_state.date_range;
 					}
 	
@@ -742,7 +741,7 @@ namespace {
 }  // namespace
 
 auto plotDataInSubplots(std::vector<data_dict_t> &data, const std::string &uuid,
-						std::vector<std::string> assigned_plot_ids) -> std::vector<std::string> {
+						std::vector<std::string> assigned_plot_ids, bool is_x_linked) -> std::vector<std::string> {
 	const auto plot_size = ImGui::GetContentRegionAvail();
 
 	static auto data_filter = [](const auto &dct) { return dct.visible; };
@@ -763,9 +762,8 @@ auto plotDataInSubplots(std::vector<data_dict_t> &data, const std::string &uuid,
 	}();
 
 	auto& app_state = AppState::getInstance();
-	const auto global_x_link = app_state.global_x_link;
 
-	if (global_x_link && (std::isnan(app_state.global_link.first) || std::isnan(app_state.global_link.second))) {
+	if (is_x_linked && (std::isnan(app_state.global_link.first) || std::isnan(app_state.global_link.second))) {
 		app_state.global_link = getPaddedXLims(data);
 	}
 
@@ -789,10 +787,10 @@ auto plotDataInSubplots(std::vector<data_dict_t> &data, const std::string &uuid,
 
 	if (app_state.always_use_subplots || n_selected > 2) {
 		const auto subplot_flags =
-			(n_selected > 1 ? ImPlotSubplotFlags_ShareItems : 0) | (!global_x_link ? ImPlotSubplotFlags_LinkAllX : 0);
+			(n_selected > 1 ? ImPlotSubplotFlags_ShareItems : 0) | (!is_x_linked ? ImPlotSubplotFlags_LinkAllX : 0);
 		
 			if (ImPlot::BeginSubplots(subplot_id.c_str(), rows, cols, plot_size, subplot_flags)) {
-			if (!global_x_link) {
+			if (!is_x_linked) {
 				fixSubplotRanges(data);
 			}
 
@@ -800,20 +798,20 @@ auto plotDataInSubplots(std::vector<data_dict_t> &data, const std::string &uuid,
 
 			for (int i = 0; auto &col : data | std::views::filter(data_filter)) {
 				doPlotSubplots(i, n_selected, cols, col, color_map[coerceCast<size_t>(i) % color_map.size()],
-							   window_date_range);
+							   window_date_range, is_x_linked);
 				++i;
 			}
 
 			ImPlot::EndSubplots();
 		}
 	} else {
-		if (app_state.global_x_link) {
+		if (is_x_linked) {
 			ImPlot::SetNextAxisLinks(ImAxis_X1, &app_state.global_link.first, &app_state.global_link.second);
 		}
 
 		if (ImPlot::BeginPlot(subplot_id.c_str(), plot_size, ImPlotFlags_NoTitle)) {
-			for (const auto &e : prepareAxes(assigned_plot_ids, data, color_map)) {
-				doPlotSingle(e);
+			for (const auto &e : prepareAxes(assigned_plot_ids, data, color_map, is_x_linked)) {
+				doPlotSingle(e, is_x_linked);
 			}
 
 			ImPlot::EndPlot();

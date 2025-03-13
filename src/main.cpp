@@ -302,7 +302,6 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 			}
 
 			if (ImGui::BeginMenu("Settings")) {
-				ImGui::MenuItem("Link x-axes globally", nullptr, &app_state.global_x_link);
 				ImGui::MenuItem("Always show date cursor", nullptr, &app_state.always_show_cursor);
 				ImGui::Separator();
 				ImGui::MenuItem("Always use subplots", nullptr, &app_state.always_use_subplots);
@@ -358,6 +357,17 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 			const auto loading_status = ctx.getLoadingStatus();
 
 			if (ImGui::BeginMenuBar()) {
+				bool &global_x_link = ctx.getGlobalXLinkRef();
+				ImGui::MenuItem(global_x_link ? ICON_FA_LINK_SLASH : ICON_FA_LINK, nullptr, &global_x_link);
+
+				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+					if (global_x_link) {
+						ImGui::SetTooltip("Unlink x-axes");
+					} else {
+						ImGui::SetTooltip("Link x-axes");
+					}
+				}
+
 				if (ImGui::MenuItem(ICON_FA_CLONE, nullptr, nullptr, !loading_status.is_loading)) {
 					window_contexts.push_back(ctx);
 				}
@@ -428,7 +438,8 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 					ImGui::PushFont(getFont(fontList::ROBOTO_MONO_16));
 					
 					ctx.switchToImPlotContext();
-					const auto assigned_plot_ids = plotDataInSubplots(dict, ctx.getUUID(), ctx.getAssignedPlotIDs());
+					const auto assigned_plot_ids =
+						plotDataInSubplots(dict, ctx.getUUID(), ctx.getAssignedPlotIDs(), ctx.getGlobalXLinkRef());
 					ctx.setAssignedPlotIDs(assigned_plot_ids);
 					
 					if (app_state.show_debug_menu) {

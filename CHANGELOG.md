@@ -9,6 +9,7 @@
 * fix floating point parsing on some locales
 * use system locale for anything except file parsing
 * show annotations at cursor to show next y-value
+* change global x-link to be a individual window setting
 
 ## 1.0.0 (05.03.2025)
 * initial release
