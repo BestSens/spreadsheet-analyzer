@@ -1,4 +1,4 @@
-## 1.0.1 (unreleased)
+## 1.1.0 (unreleased)
 * move configuration of maximum displayed data points to settings menu
 * fix crash if reduction factor > sample count
 * change shade color to text cursor color when switching to min/max

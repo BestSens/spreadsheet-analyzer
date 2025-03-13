@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.24)
 
-project(spreadsheet-analyzer-2 VERSION 1.0.1)
+project(spreadsheet-analyzer-2 VERSION 1.1.0)
 
 set(CMAKE_C_STANDARD 23)
 set(CMAKE_C_EXTENSIONS OFF)
