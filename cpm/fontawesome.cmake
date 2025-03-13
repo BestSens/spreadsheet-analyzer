@@ -1,8 +1,8 @@
 include(CPM)
 CPMAddPackage(
   NAME fontawesome
-  URL https://github.com/FortAwesome/Font-Awesome/raw/refs/heads/6.x/webfonts/fa-regular-400.ttf
-  URL_HASH MD5=1564b0c2e86c525600499dae390a1056
+  URL https://github.com/FortAwesome/Font-Awesome/raw/refs/heads/6.x/webfonts/fa-solid-900.ttf
+  URL_HASH MD5=b73761d82a77f73006145848a00c515b
   DOWNLOAD_ONLY YES
   DOWNLOAD_NO_EXTRACT YES
 )
@@ -19,7 +19,7 @@ if (fontawesome_ADDED)
 		OUTPUT fontawesome.c
 		COMMAND ${CMAKE_CURRENT_BINARY_DIR}/binary_to_compressed
 			-nostatic
-			${fontawesome_SOURCE_DIR}/fa-regular-400.ttf
+			${fontawesome_SOURCE_DIR}/fa-solid-900.ttf
 			font_fontawesome
 			> fontawesome.c
 		DEPENDS binary_to_compressed
