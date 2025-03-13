@@ -10,6 +10,7 @@
 #include "dicts.hpp"
 #include "implot.h"
 #include "spdlog/spdlog.h"
+#include "string_helpers.hpp"
 #include "uuid.h"
 #include "uuid_generator.hpp"
 
@@ -39,11 +40,13 @@ public:
 		}
 	}
 
-	WindowContext(const WindowContext &other) : data{other.data}, window_title{other.window_title} {};
+	WindowContext(const WindowContext &other)
+		: data{other.data}, window_title{getIncrementedWindowTitle(other.window_title)} {};
+
 	auto operator=(const WindowContext &other) -> WindowContext & {
 		if (this != &other) {
 			this->data = other.data;
-			this->window_title = other.window_title;
+			this->window_title = getIncrementedWindowTitle(other.window_title);
 		}
 
 		return *this;

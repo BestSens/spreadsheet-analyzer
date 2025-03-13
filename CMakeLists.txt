@@ -33,6 +33,7 @@ add_executable(spreadsheet_analyzer
 	src/winapi.cpp
 	src/fonts.cpp
 	src/textures.c
+	src/string_helpers.cpp
 )
 
 if(WIN32)
