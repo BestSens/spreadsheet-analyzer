@@ -1,4 +1,5 @@
 ## 1.1.1 (unreleased)
+* fix generation of unique file titles to work on more circumstances
 
 ## 1.1.0 (14.03.2025)
 * move configuration of maximum displayed data points to settings menu

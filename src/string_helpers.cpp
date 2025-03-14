@@ -36,7 +36,7 @@ auto getIncrementedWindowTitle(const std::string &title) -> std::string {
 		return title + " (1)";
 	}
 
-	const auto base_title = title.substr(0, pos);
+	const auto base_title = title.substr(0, pos - 1);
 	const auto number_str = title.substr(pos + 1, title.find_last_of(')') - pos - 1);
 
 	int number = 0;

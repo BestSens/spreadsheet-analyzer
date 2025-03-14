@@ -151,6 +151,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 	setSystemLocale();
 
 	std::list<WindowContext> window_contexts{};
+	WindowContext::window_contexts = &window_contexts;
 
 	{
 		const auto paths_expanded = preparePaths(commandline_paths);

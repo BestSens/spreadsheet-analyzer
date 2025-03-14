@@ -41,12 +41,12 @@ public:
 	}
 
 	WindowContext(const WindowContext &other)
-		: data{other.data}, window_title{getIncrementedWindowTitle(other.window_title)} {};
+		: data{other.data}, window_title{getUniqueWindowTitle(other.window_title)} {};
 
 	auto operator=(const WindowContext &other) -> WindowContext & {
 		if (this != &other) {
 			this->data = other.data;
-			this->window_title = getIncrementedWindowTitle(other.window_title);
+			this->window_title = getUniqueWindowTitle(other.window_title);
 		}
 
 		return *this;
@@ -155,6 +155,8 @@ public:
 
 			return {};
 		});
+
+		this->window_title = getUniqueWindowTitle(this->window_title);
 	}
 
 	auto checkForFinishedLoading() -> void {
@@ -218,6 +220,44 @@ public:
 			ImPlot::SetCurrentContext(this->implot_context);
 		}
 	}
+
+	[[nodiscard]] static auto getUniqueWindowTitle(const std::string_view title) -> std::string {
+		if (WindowContext::window_contexts == nullptr) {
+			spdlog::error("Window contexts not initialized");
+			return std::string{title};
+		}
+
+		const auto &ctxs = *WindowContext::window_contexts;
+
+		const auto stripped_title = [&title]() -> std::string_view {
+			const auto pos = title.find_last_of('(');
+			if (pos == std::string::npos) {
+				return title;
+			}
+
+			return title.substr(0, pos - 1);
+		}();
+
+		auto is_unique = [&]() {
+			return std::ranges::none_of(ctxs, [&](const auto &ctx) {
+				return ctx.getWindowTitle() == stripped_title;
+			});
+		}();
+
+		std::string new_title{stripped_title};
+
+		while (!is_unique) {
+			new_title = getIncrementedWindowTitle(new_title);
+			is_unique = std::ranges::none_of(ctxs, [&](const auto &ctx) {
+				return ctx.getWindowTitle() == new_title;
+			});
+		}
+
+		return new_title;
+	}
+
+	inline static const std::list<WindowContext> *window_contexts{nullptr};
+
 private:
 	ImPlotContext *implot_context{nullptr};
 	std::vector<data_dict_t> data{};
