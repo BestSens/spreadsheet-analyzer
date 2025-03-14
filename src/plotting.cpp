@@ -565,6 +565,7 @@ namespace {
 
 		ImPlot::SetupAxis(ImAxis_X1, "date", ImPlotAxisFlags_NoLabel);
 		ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Time);
+		ImPlot::SetupLegend(ImPlotLocation_NorthWest, ImPlotLegendFlags_NoMenus);
 
 		const auto date_lims = [&]() {
 			if (is_x_linked) {
@@ -690,6 +691,7 @@ namespace {
 			ImPlot::SetupAxes("date", col.name.c_str(), x_axis_flags);
 			ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Time);
 			ImPlot::SetupAxisFormat(ImAxis_Y1, getFormatString(col).c_str());
+			ImPlot::SetupLegend(ImPlotLocation_North, ImPlotLegendFlags_Horizontal | ImPlotLegendFlags_NoMenus);
 
 			const auto date_range = [is_x_linked, is_x_global_linked, current_subplot, &col, &global_link_min,
 									 &global_link_max]() {
