@@ -525,7 +525,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 			ctx.checkForFinishedLoading();
 			auto &dict = ctx.getData();
 			auto &window_open = ctx.getWindowOpenRef();
-
+			
 			ImGui::SetNextWindowDockID(dockspace, ImGuiCond_Once);
 			ImGui::Begin(ctx.getWindowID().c_str(), &window_open,
 						 ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_MenuBar);
