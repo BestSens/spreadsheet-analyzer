@@ -7,4 +7,4 @@
 #include "dicts.hpp"
 #include "window_context.hpp"
 
-auto plotDataInSubplots(WindowContext &window_context) -> void;
+auto plotDataInSubplots(CSVWindowContext &window_context) -> void;

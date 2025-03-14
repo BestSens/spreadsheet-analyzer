@@ -8,6 +8,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 // Libraries
@@ -67,13 +68,17 @@ namespace {
 		double date_max = std::numeric_limits<double>::lowest();
 		
 		for (const auto& window_context : window_contexts) {
-			const auto& data = window_context.getData();
+			if (!std::holds_alternative<CSVWindowContext>(window_context)) {
+				continue;
+			}
+
+			const auto &data = std::get<CSVWindowContext>(window_context).getData();
 
 			if (data.empty()) {
 				continue;
 			}
 
-			for (const auto &e : window_context.getData()) {
+			for (const auto &e : data) {
 				if (!e.visible) {
 					continue;
 				}
@@ -206,21 +211,44 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 	setSystemLocale();
 
-	const auto raw_files = parseRawFiles(commandline_paths);
-	const auto raw_data =
-		getDownsampled(std::span{raw_files.getEntries()}, {raw_stream_t::COE, raw_stream_t::INT1, raw_stream_t::INT2},
-					   raw_files.getEntries().size());
-
-	commandline_paths.clear();
-	std::list<WindowContext> window_contexts{};
-	WindowContext::window_contexts = &window_contexts;
+	auto &window_contexts = AppState::getInstance().window_contexts;
 
 	{
 		const auto paths_expanded = preparePaths(commandline_paths);
 
-		if (!paths_expanded.empty()) {
-			window_contexts.emplace_back(paths_expanded, loadCSVs);
+		std::vector<std::filesystem::path> csv_paths;
+		for (const auto& path : paths_expanded) {
+			if (path.extension() == ".csv") {
+				csv_paths.push_back(path);
+			}
 		}
+
+		if (!csv_paths.empty()) {
+			window_contexts.emplace_back(std::in_place_type<CSVWindowContext>, csv_paths, loadCSVs);
+		}
+	}
+
+	const auto raw_data = [&commandline_paths]() -> std::vector<downsampled_data_t> {
+		std::vector<downsampled_data_t> raw_data{};
+		std::vector<std::filesystem::path> raw_stream_paths;
+
+		for (const auto &path : commandline_paths) {
+			if (path.extension() == ".bin") {
+				raw_stream_paths.push_back(path);
+			}
+		}
+
+		if (!raw_stream_paths.empty()) {
+			const auto raw_files = parseRawFiles(raw_stream_paths);
+			raw_data = getDownsampled(std::span{raw_files.getEntries()}, {raw_stream_t::COE, raw_stream_t::INT1, raw_stream_t::INT2},
+									  raw_files.getEntries().size());
+		}
+
+		return raw_data;
+	}();
+
+	if (!raw_data.empty()) {
+		window_contexts.emplace_back(std::in_place_type<RawWindowContext>, raw_data);
 	}
 
 	if (!SDL_Init(SDL_INIT_VIDEO)) {
@@ -391,7 +419,17 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 			if (!paths.empty()) {
 				const auto paths_expanded = preparePaths(paths);
-				window_contexts.emplace_back(paths_expanded, loadCSVs);
+				
+				std::vector<std::filesystem::path> csv_paths;
+				for (const auto& path : paths_expanded) {
+					if (path.extension() == ".csv") {
+						csv_paths.push_back(path);
+					}
+				}
+
+				if (!csv_paths.empty()) {
+					window_contexts.emplace_back(std::in_place_type<CSVWindowContext>, csv_paths, loadCSVs);
+				}
 			}
 		}
 
@@ -406,78 +444,87 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 		updateDateRange(window_contexts);
 
-		ImGui::SetNextWindowDockID(dockspace, ImGuiCond_Once);
-		if (ImGui::Begin("test", nullptr, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse)) {
-			static auto *raw_ctx = ImPlot::CreateContext();
-			ImPlot::SetCurrentContext(raw_ctx);
-			ImPlot::GetStyle().UseLocalTime = false;
-			ImPlot::GetStyle().UseISO8601 = true;
-			ImPlot::GetStyle().Use24HourClock = true;
+		for (auto &temp : window_contexts) {
+			if (!std::holds_alternative<RawWindowContext>(temp)) {
+				continue;
+			}
 
-			const auto window_content_size = ImGui::GetContentRegionAvail();
-			if (ImPlot::BeginPlot("test", window_content_size, ImPlotFlags_NoTitle)) {
-				ImPlot::SetupAxis(ImAxis_X1, "date");
-				ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Time);
-				ImPlot::SetupAxis(ImAxis_Y1, "Int1");
-				ImPlot::SetupAxis(ImAxis_Y2, "Int2");
-				ImPlot::SetupAxis(ImAxis_Y3, "CoE");
+			auto &ctx = std::get<RawWindowContext>(temp);
+			auto &window_open = ctx.getWindowOpenRef();
 
-				ImPlot::SetAxis(ImAxis_Y1);
+			ImGui::SetNextWindowDockID(dockspace, ImGuiCond_Once);
+			if (ImGui::Begin("test", &window_open, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse)) {
+				ctx.switchToImPlotContext();
 
-				plot_data_t plot_data_mean{
-					.data = &raw_data,
-					.stream_id = raw_stream_t::INT1,
-					.agg_id = agg_id_t::mean
-				};
+				const auto window_content_size = ImGui::GetContentRegionAvail();
+				if (ImPlot::BeginPlot("test", window_content_size, ImPlotFlags_NoTitle)) {
+					ImPlot::SetupAxis(ImAxis_X1, "date");
+					ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Time);
+					ImPlot::SetupAxisZoomConstraints(ImAxis_X1, 0, 120.0);
+					ImPlot::SetupAxis(ImAxis_Y1, "Int1");
+					ImPlot::SetupAxis(ImAxis_Y2, "Int2");
+					ImPlot::SetupAxis(ImAxis_Y3, "CoE");
 
-				plot_data_t plot_data_stdevp{
-					.data = &raw_data,
-					.stream_id = raw_stream_t::INT1,
-					.agg_id = agg_id_t::stdevp
-				};
+					ImPlot::SetAxis(ImAxis_Y1);
 
-				plot_data_t plot_data_stdevm{
-					.data = &raw_data,
-					.stream_id = raw_stream_t::INT1,
-					.agg_id = agg_id_t::stdevm
-				};
+					const auto &data = ctx.getData();
 
-				ImPlot::PlotLineG("Int1", plotRaw, &plot_data_mean, static_cast<int>(raw_data.size()));
-				ImPlot::SetNextFillStyle(ImPlot::GetLastItemColor(), 0.25f);
-				ImPlot::PlotShadedG("##Int1_shaded", plotRaw, &plot_data_stdevp, plotRaw, &plot_data_stdevm,
-									static_cast<int>(raw_data.size()));
+					plot_data_t plot_data_mean{
+						.data = &data, .stream_id = raw_stream_t::INT1, .agg_id = agg_id_t::mean};
 
-				ImPlot::SetAxis(ImAxis_Y2);
+					plot_data_t plot_data_stdevp{
+						.data = &data, .stream_id = raw_stream_t::INT1, .agg_id = agg_id_t::stdevp};
 
-				plot_data_mean.stream_id = raw_stream_t::INT2;
-				plot_data_stdevp.stream_id = raw_stream_t::INT2;
-				plot_data_stdevm.stream_id = raw_stream_t::INT2;
+					plot_data_t plot_data_stdevm{
+						.data = &data, .stream_id = raw_stream_t::INT1, .agg_id = agg_id_t::stdevm};
 
-				ImPlot::PlotLineG("Int2", plotRaw,  &plot_data_mean, static_cast<int>(raw_data.size()));
-				ImPlot::SetNextFillStyle(ImPlot::GetLastItemColor(), 0.25f);
-				ImPlot::PlotShadedG("##Int2_shaded", plotRaw, &plot_data_stdevp, plotRaw, &plot_data_stdevm,
-									static_cast<int>(raw_data.size()));
+					ImPlot::PlotLineG("Int1", plotRaw, &plot_data_mean, static_cast<int>(data.size()));
+					ImPlot::SetNextFillStyle(ImPlot::GetLastItemColor(), 0.25f);
+					ImPlot::PlotShadedG("##Int1_shaded", plotRaw, &plot_data_stdevp, plotRaw, &plot_data_stdevm,
+										static_cast<int>(data.size()));
 
-				ImPlot::SetAxis(ImAxis_Y3);
+					ImPlot::SetAxis(ImAxis_Y2);
 
-				plot_data_mean.stream_id = raw_stream_t::COE;
-				plot_data_stdevp.stream_id = raw_stream_t::COE;
-				plot_data_stdevm.stream_id = raw_stream_t::COE;
+					plot_data_mean.stream_id = raw_stream_t::INT2;
+					plot_data_stdevp.stream_id = raw_stream_t::INT2;
+					plot_data_stdevm.stream_id = raw_stream_t::INT2;
 
-				ImPlot::PlotLineG("CoE", plotRaw, &plot_data_mean, static_cast<int>(raw_data.size()));
-				ImPlot::SetNextFillStyle(ImPlot::GetLastItemColor(), 0.25f);
-				ImPlot::PlotShadedG("##CoE_shaded", plotRaw, &plot_data_stdevp, plotRaw, &plot_data_stdevm,
-									static_cast<int>(raw_data.size()));
+					ImPlot::PlotLineG("Int2", plotRaw, &plot_data_mean, static_cast<int>(data.size()));
+					ImPlot::SetNextFillStyle(ImPlot::GetLastItemColor(), 0.25f);
+					ImPlot::PlotShadedG("##Int2_shaded", plotRaw, &plot_data_stdevp, plotRaw, &plot_data_stdevm,
+										static_cast<int>(data.size()));
 
-				ImPlot::EndPlot();
+					ImPlot::SetAxis(ImAxis_Y3);
+
+					plot_data_mean.stream_id = raw_stream_t::COE;
+					plot_data_stdevp.stream_id = raw_stream_t::COE;
+					plot_data_stdevm.stream_id = raw_stream_t::COE;
+
+					ImPlot::PlotLineG("CoE", plotRaw, &plot_data_mean, static_cast<int>(data.size()));
+					ImPlot::SetNextFillStyle(ImPlot::GetLastItemColor(), 0.25f);
+					ImPlot::PlotShadedG("##CoE_shaded", plotRaw, &plot_data_stdevp, plotRaw, &plot_data_stdevm,
+										static_cast<int>(data.size()));
+
+					ImPlot::EndPlot();
+				}
+			}
+			ImGui::End();
+
+			if (!window_open) {
+				ImGui::ClearWindowSettings(ctx.getWindowID().c_str());
+				ctx.scheduleForDeletion();
 			}
 		}
-		ImGui::End();
 
-		for (auto &ctx : window_contexts) {
+		for (auto &temp : window_contexts) {
+			if (!std::holds_alternative<CSVWindowContext>(temp)) {
+				continue;
+			}
+
+			auto &ctx = std::get<CSVWindowContext>(temp);
 			ctx.checkForFinishedLoading();
 			auto &dict = ctx.getData();
-			auto window_open = ctx.getWindowOpenRef();
+			auto &window_open = ctx.getWindowOpenRef();
 
 			ImGui::SetNextWindowDockID(dockspace, ImGuiCond_Once);
 			ImGui::Begin(ctx.getWindowID().c_str(), &window_open,
@@ -600,7 +647,10 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 		}
 
 		window_contexts.erase(std::remove_if(window_contexts.begin(), window_contexts.end(),
-											 [](const auto &ctx) { return ctx.isScheduledForDeletion(); }),
+											 [](const auto &ctx) {
+												 return std::visit(
+													 [](const auto &w) { return w.isScheduledForDeletion(); }, ctx);
+											 }),
 							  window_contexts.end());
 
 		ImGui::Render();

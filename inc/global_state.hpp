@@ -1,9 +1,12 @@
 #pragma once
 
 #include <limits>
+#include <list>
 #include <utility>
 
 #include "SDL3/SDL.h"
+#include "window_context.hpp"
+
 
 class AppState {
 public:
@@ -38,6 +41,8 @@ public:
 	float display_scale{1.0f};
 	SDL_Renderer* renderer{nullptr};
 	SDL_Surface* window_icon{nullptr};
+
+	std::list<std::variant<CSVWindowContext, RawWindowContext>> window_contexts{};
 	// NOLINTEND(misc-non-private-member-variables-in-classes)
 
 private:

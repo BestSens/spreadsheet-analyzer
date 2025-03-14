@@ -727,7 +727,7 @@ namespace {
 	}
 }  // namespace
 
-auto plotDataInSubplots(WindowContext &window_context) -> void {
+auto plotDataInSubplots(CSVWindowContext &window_context) -> void {
 	const auto plot_size = ImGui::GetContentRegionAvail();
 
 	static auto data_filter = [](const auto &dct) { return dct.visible; };
