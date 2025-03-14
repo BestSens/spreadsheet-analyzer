@@ -111,7 +111,7 @@ public:
 		return this->global_x_link;
 	}
 
-	auto getGlobalXLink() const -> bool {
+	[[nodiscard]] auto getGlobalXLink() const -> bool {
 		return this->global_x_link;
 	}
 
@@ -119,7 +119,7 @@ public:
 		return this->force_subplot;
 	}
 
-	auto getForceSubplot() const -> bool {
+	[[nodiscard]] auto getForceSubplot() const -> bool {
 		return this->force_subplot;
 	}
 
@@ -144,6 +144,8 @@ public:
 		}
 
 		this->required_files = paths.size();
+
+		// NOLINTNEXTLINE(bugprone-exception-escape)
 		this->data_dict_f = std::async(std::launch::async, [this, fn, paths]() -> std::vector<data_dict_t> {
 			try {
 				auto &temp_finished_files = *this->finished_files;
@@ -151,6 +153,8 @@ public:
 				return fn(paths, temp_finished_files, temp_stop_loading);
 			} catch (const std::exception &e) {
 				spdlog::error("error loading files for {}: {}", this->window_title, e.what());
+			} catch (...) {
+				spdlog::error("error loading files for {}", this->window_title);
 			}
 
 			return {};

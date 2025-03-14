@@ -546,11 +546,9 @@ namespace {
 	}
 
 	struct axes_spec_t {
-		// NOLINTBEGIN(misc-non-private-member-variables-in-classes)
-		ImAxis axis;
-		ImVec4 color;
-		data_dict_t &col;
-		// NOLINTEND(misc-non-private-member-variables-in-classes)
+		ImAxis axis{ImAxis_Y1};
+		ImVec4 color{IMPLOT_AUTO_COL};
+		data_dict_t *col{nullptr};
 	};
 
 	auto prepareAxes(std::vector<std::string> &assigned_plot_ids, std::vector<data_dict_t> &data,
@@ -608,7 +606,7 @@ namespace {
 
 			const auto axis = axes[i];
 
-			const axes_spec_t spec{.axis = axis, .color = color_map[i % color_map.size()], .col = col};
+			const axes_spec_t spec{.axis = axis, .color = color_map[i % color_map.size()], .col = &col};
 			const auto is_new_data = i < old_assigned_plot_ids.size() ? old_assigned_plot_ids[i] != col.uuid : true;
 
 			ImPlot::SetupAxis(axis, col.name.c_str(), i % 2 != 0 ? ImPlotAxisFlags_Opposite : ImPlotAxisFlags_None);
@@ -645,21 +643,24 @@ namespace {
 	}
 
 	auto doPlotSingle(const axes_spec_t &axis_spec, bool is_x_linked) -> void {
+		assert(axis_spec.col != nullptr);
+		
 		const auto date_lims = [&]() {
 			if (is_x_linked) {
 				auto &app_state = AppState::getInstance();
 				return app_state.date_range;
 			}
 
-			return getDateRange(axis_spec.col);
+			return getDateRange(*axis_spec.col);
 		}();
 
-		drawCursor(axis_spec.col);
+		drawCursor(*axis_spec.col);
 
 		ImPlot::SetAxis(axis_spec.axis);
-		plotSingleMesurement(axis_spec.col, axis_spec.color, date_lims);
+		plotSingleMesurement(*axis_spec.col, axis_spec.color, date_lims);
 	}
 
+	// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 	auto doPlotSubplots(int current_pos, int n_selected, int col_count, data_dict_t &col, const ImVec4 &plot_color,
 						const std::pair<double, double> &window_date_range, bool is_x_global_linked) -> void {
 		auto &app_state = AppState::getInstance();
