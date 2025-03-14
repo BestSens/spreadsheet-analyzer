@@ -7,6 +7,7 @@
 #include <ranges>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 // Libraries
@@ -65,13 +66,17 @@ namespace {
 		double date_max = std::numeric_limits<double>::lowest();
 		
 		for (const auto& window_context : window_contexts) {
-			const auto& data = window_context.getData();
+			if (!std::holds_alternative<CSVWindowContext>(window_context)) {
+				continue;
+			}
+
+			const auto &data = std::get<CSVWindowContext>(window_context).getData();
 
 			if (data.empty()) {
 				continue;
 			}
 
-			for (const auto &e : window_context.getData()) {
+			for (const auto &e : data) {
 				if (!e.visible) {
 					continue;
 				}
@@ -150,14 +155,13 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 	setSystemLocale();
 
-	std::list<WindowContext> window_contexts{};
-	WindowContext::window_contexts = &window_contexts;
+	auto &window_contexts = AppState::getInstance().window_contexts;
 
 	{
 		const auto paths_expanded = preparePaths(commandline_paths);
 
 		if (!paths_expanded.empty()) {
-			window_contexts.emplace_back(paths_expanded, loadCSVs);
+			window_contexts.emplace_back(std::in_place_type<CSVWindowContext>, paths_expanded, loadCSVs);
 		}
 	}
 
@@ -329,7 +333,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 			if (!paths.empty()) {
 				const auto paths_expanded = preparePaths(paths);
-				window_contexts.emplace_back(paths_expanded, loadCSVs);
+				window_contexts.emplace_back(std::in_place_type<CSVWindowContext>, paths_expanded, loadCSVs);
 			}
 		}
 
@@ -344,10 +348,15 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 		updateDateRange(window_contexts);
 
-		for (auto &ctx : window_contexts) {
+		for (auto &temp : window_contexts) {
+			if (!std::holds_alternative<CSVWindowContext>(temp)) {
+				continue;
+			}
+
+			auto &ctx = std::get<CSVWindowContext>(temp);
 			ctx.checkForFinishedLoading();
 			auto &dict = ctx.getData();
-			auto window_open = ctx.getWindowOpenRef();
+			auto &window_open = ctx.getWindowOpenRef();
 			
 			ImGui::SetNextWindowDockID(dockspace, ImGuiCond_Once);
 			ImGui::Begin(ctx.getWindowID().c_str(), &window_open,
@@ -470,7 +479,10 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 		}
 
 		window_contexts.erase(std::remove_if(window_contexts.begin(), window_contexts.end(),
-											 [](const auto &ctx) { return ctx.isScheduledForDeletion(); }),
+											 [](const auto &ctx) {
+												 return std::visit(
+													 [](const auto &w) { return w.isScheduledForDeletion(); }, ctx);
+											 }),
 							  window_contexts.end());
 
 		ImGui::Render();
