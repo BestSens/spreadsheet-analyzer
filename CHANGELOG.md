@@ -1,3 +1,5 @@
+## 1.1.1 (unreleased)
+
 ## 1.1.0 (14.03.2025)
 * move configuration of maximum displayed data points to settings menu
 * fix crash if reduction factor > sample count
