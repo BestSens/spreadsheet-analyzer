@@ -4,7 +4,7 @@
 * update implot to v1.0 (https://github.com/epezent/implot/releases/tag/v1.0)
 * update SDL to v3.4.4 (https://github.com/libsdl-org/SDL/releases/tag/release-3.4.4)
 * update SDL_image to v3.4.2 (https://github.com/libsdl-org/SDL_image/releases/tag/release-3.4.2)
-* update csv-parser to v3.5.1 (https://github.com/vincentlaucsb/csv-parser/releases/tag/3.5.1)
+* update csv-parser to v5.1.0 (https://github.com/vincentlaucsb/csv-parser/releases/tag/5.1.0)
 * add support for ISO 8601 (`YYYY-MM-DDTHH:MM:SS`), European slash (`DD/MM/YYYY HH:MM:SS`), and US (`MM/DD/YYYY HH:MM:SS`) timestamp formats
 * show CSV import configuration dialog on parse failure, allowing per-file configuration of field delimiter, decimal separator, and date format
 * make header parsing case-insensitive
