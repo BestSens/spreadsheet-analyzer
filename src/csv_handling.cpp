@@ -383,7 +383,7 @@ namespace {
 		std::nth_element(std::execution::par_unseq, data.begin(), data.begin() + static_cast<long>(n), data.end());
 #endif
 
-		if (n % 2 != 0) {
+		if (data.size() % 2 != 0) {
 			return data.at(n);
 		}
 
@@ -423,7 +423,7 @@ auto preparePaths(std::vector<std::filesystem::path> paths) -> std::vector<std::
 	return files;
 }
 
-auto loadCSVs(const std::vector<std::filesystem::path>& paths, size_t& finished, const bool& stop_loading,
+auto loadCSVs(const std::vector<std::filesystem::path>& paths, size_t& finished, const std::atomic<bool>& stop_loading,
 			  const csv_parse_config_t& config, std::string& parse_error_out) -> std::vector<data_dict_t> {
 	if (paths.empty()) {
 		return {};
