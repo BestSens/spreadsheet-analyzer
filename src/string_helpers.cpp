@@ -41,14 +41,13 @@ auto getIncrementedWindowTitle(const std::string &title) -> std::string {
 		return title + " (1)";
 	}
 
-	const auto base_title = title.substr(0, pos - 1);
-	const auto number_str = title.substr(pos + 1, title.find_last_of(')') - pos - 1);
+		const auto close_pos = title.find(')', pos);
+		if (close_pos == std::string::npos) {
+			return title + " (1)";
+		}
 
-	int number = 0;
-	try {
-		number = std::stoi(number_str);
-	} catch (...) {
-		return title + " (1)";
+		const auto base_title = title.substr(0, pos - 1);
+		const auto number_str = title.substr(pos + 1, close_pos - pos - 1);
 	}
 
 	return base_title + " (" + std::to_string(number + 1) + ")";
