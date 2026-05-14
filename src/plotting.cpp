@@ -279,6 +279,10 @@ namespace {
 
 	auto getIndicesFromTimeRange(const std::vector<time_t> &date, const ImPlotRange &limits)
 		-> std::pair<size_t, size_t> {
+		if (date.empty()) {
+			return {0, 0};
+		}
+
 		const auto start = static_cast<time_t>(limits.Min);
 		const auto stop = static_cast<time_t>(limits.Max);
 		const auto start_it = std::ranges::lower_bound(date, start);
@@ -298,6 +302,10 @@ namespace {
 
 	auto getIndicesFromAggregate(const std::vector<data_aggregate_t> &agg, const ImPlotRange &limits)
 		-> std::pair<size_t, size_t> {
+		if (agg.empty()) {
+			return {0, 0};
+		}
+
 		const auto start = static_cast<time_t>(limits.Min);
 		const auto stop = static_cast<time_t>(limits.Max);
 		const auto start_it =
