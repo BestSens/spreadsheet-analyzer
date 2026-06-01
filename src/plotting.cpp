@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cassert>
+#include <cmath>
 #include <cstdint>
 #include <numeric>
 #include <ranges>
@@ -366,6 +367,21 @@ namespace {
 		return {data_min - padding, data_max + padding};
 	}
 
+	auto isValidRange(const std::pair<double, double> &range) -> bool {
+		return std::isfinite(range.first) && std::isfinite(range.second) && range.first < range.second;
+	}
+
+	auto getCurrentPlotXRange() -> std::pair<double, double> {
+		const auto *current_plot = ImPlot::GetCurrentPlot();
+		if (current_plot == nullptr) {
+			const auto nan = std::numeric_limits<double>::quiet_NaN();
+			return {nan, nan};
+		}
+
+		const auto &range = current_plot->Axes[ImAxis_X1].Range;
+		return {range.Min, range.Max};
+	}
+
 	auto fixSubplotRanges(const std::vector<data_dict_t> &data) -> void {
 		auto *implot_ctx = ImPlot::GetCurrentContext();
 		auto *subplot = implot_ctx->CurrentSubplot;
@@ -685,7 +701,8 @@ namespace {
 
 	// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 	auto doPlotSubplots(int current_pos, int n_selected, int col_count, data_dict_t &col, const ImVec4 &plot_color,
-						const std::pair<double, double> &window_date_range, bool is_x_global_linked) -> void {
+						const std::pair<double, double> &window_date_range, bool is_x_global_linked,
+						std::pair<double, double> *captured_x_range) -> void {
 		auto &app_state = AppState::getInstance();
 		double &global_link_min = app_state.global_link.first;
 		double &global_link_max = app_state.global_link.second;
@@ -762,6 +779,13 @@ namespace {
 
 			drawCursor(col);
 
+			if (!is_x_global_linked && captured_x_range != nullptr && !isValidRange(*captured_x_range)) {
+				const auto current_x_range = getCurrentPlotXRange();
+				if (isValidRange(current_x_range)) {
+					*captured_x_range = current_x_range;
+				}
+			}
+
 			ImPlot::EndPlot();
 		}
 	}
@@ -791,9 +815,10 @@ auto plotDataInSubplots(CSVWindowContext &window_context) -> void {
 
 	auto& app_state = AppState::getInstance();
 
-	if (window_context.getForceSubplot() &&
+	if ((window_context.getGlobalXLink() || window_context.getForceSubplot()) &&
 		(std::isnan(app_state.global_link.first) || std::isnan(app_state.global_link.second))) {
-		app_state.global_link = getPaddedXLims(data);
+		const auto local_x_range = window_context.getLastLocalXRange();
+		app_state.global_link = isValidRange(local_x_range) ? local_x_range : getPaddedXLims(data);
 	}
 
 	const auto subplot_id = "##" + window_context.getUUID();
@@ -821,6 +846,9 @@ auto plotDataInSubplots(CSVWindowContext &window_context) -> void {
 			(n_selected > 1 ? ImPlotSubplotFlags_ShareItems : 0) | (!is_x_linked ? ImPlotSubplotFlags_LinkAllX : 0);
 		
 			if (ImPlot::BeginSubplots(subplot_id.c_str(), rows, cols, plot_size, subplot_flags)) {
+			std::pair<double, double> captured_x_range{std::numeric_limits<double>::quiet_NaN(),
+													 std::numeric_limits<double>::quiet_NaN()};
+
 			if (!is_x_linked) {
 				fixSubplotRanges(data);
 			}
@@ -829,8 +857,12 @@ auto plotDataInSubplots(CSVWindowContext &window_context) -> void {
 
 			for (int i = 0; auto &col : data | std::views::filter(data_filter)) {
 				doPlotSubplots(i, n_selected, cols, col, color_map[coerceCast<size_t>(i) % color_map.size()],
-							   window_date_range, is_x_linked);
+							   window_date_range, is_x_linked, &captured_x_range);
 				++i;
+			}
+
+			if (!is_x_linked && isValidRange(captured_x_range)) {
+				window_context.setLastLocalXRange(captured_x_range);
 			}
 
 			ImPlot::EndSubplots();
@@ -843,6 +875,13 @@ auto plotDataInSubplots(CSVWindowContext &window_context) -> void {
 		if (ImPlot::BeginPlot(subplot_id.c_str(), plot_size, ImPlotFlags_NoTitle)) {
 			for (const auto &e : prepareAxes(window_context.getAssignedPlotIDsRef(), data, color_map, is_x_linked)) {
 				doPlotSingle(e, is_x_linked);
+			}
+
+			if (!is_x_linked) {
+				const auto current_x_range = getCurrentPlotXRange();
+				if (isValidRange(current_x_range)) {
+					window_context.setLastLocalXRange(current_x_range);
+				}
 			}
 
 			ImPlot::EndPlot();
