@@ -18,19 +18,18 @@ jobs:
         include:
           - os: windows-latest
             build_type: Release
-            artifact_name: spreadsheet_analyzer.exe
-            asset_name: spreadsheet-analyzer-windows
+            artifact_name: spreadsheet_analyzer_Windows_x86_64.exe
+            archive_suffix: windows-x86_64
 
           - os: ubuntu-latest
             build_type: Release
-            artifact_name: spreadsheet_analyzer
-            asset_name: spreadsheet-analyzer-linux
+            artifact_name: spreadsheet_analyzer_Linux-x86_64
+            archive_suffix: linux-x86_64
 
           - os: macos-latest
             build_type: Release
-            artifact_name: spreadsheet_analyzer.app
-            asset_name: spreadsheet-analyzer-macos-arm
-            dmg_name: spreadsheet-analyzer-macos-arm.dmg
+            artifact_name: spreadsheet_analyzer_macOS-ARM64.app
+            archive_suffix: macos-arm64
 
     steps:
       - uses: actions/checkout@v6
@@ -44,6 +43,7 @@ jobs:
           sudo apt-get install -y \
             build-essential \
             cmake \
+            zip \
             pkg-config \
             libgtk-3-dev \
             zlib1g-dev \
@@ -62,7 +62,7 @@ jobs:
 
       - name: Set up Visual Studio
         if: runner.os == 'Windows'
-        uses: microsoft/setup-msbuild@v1.1
+        uses: microsoft/setup-msbuild@v3
 
       - name: Install LLVM and Ninja
         if: runner.os == 'Windows'
@@ -94,40 +94,27 @@ jobs:
         if: runner.os != 'Windows'
         run: cmake --build build --config ${{ matrix.build_type }} --parallel $(if [ "$RUNNER_OS" = "macOS" ]; then sysctl -n hw.ncpu; else nproc; fi)
 
-      - name: Create macOS DMG
-        if: runner.os == 'macOS'
-        run: |
-          mkdir -p dmg_temp
-          cp -r build/${{ matrix.artifact_name }} dmg_temp/
-          hdiutil create -volname "Spreadsheet Analyzer" -srcfolder dmg_temp -ov -format UDZO "build/${{ matrix.dmg_name }}"
-
-      - name: Zip macOS App Bundle
-        if: runner.os == 'macOS'
-        run: |
-          ditto -c -k --sequesterRsrc --keepParent build/${{ matrix.artifact_name }} build/${{ matrix.asset_name }}.app.zip
-
-      - name: Release Windows EXE
+      - name: Package release archive (Windows)
         if: runner.os == 'Windows'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: Release ${{ github.ref_name }}
-          files: ./build/${{ matrix.build_type }}/${{ matrix.artifact_name }}
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path build/package -Force | Out-Null
+          Copy-Item "build/${{ matrix.build_type }}/${{ matrix.artifact_name }}" "build/package/"
+          Copy-Item "LICENSE" "build/package/"
+          $archiveName = "spreadsheet_analyzer_${{ github.ref_name }}_${{ matrix.archive_suffix }}.zip"
+          Compress-Archive -Path "build/package/*" -DestinationPath "build/$archiveName" -Force
 
-      - name: Release Linux binary
-        if: runner.os == 'Linux'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: Release ${{ github.ref_name }}
-          files: ./build/${{ matrix.artifact_name }}
+      - name: Package release archive (macOS/Linux)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p build/package
+          cp -r build/${{ matrix.artifact_name }} build/package/
+          cp LICENSE build/package/
+          (cd build/package && zip -r "../spreadsheet_analyzer_${{ github.ref_name }}_${{ matrix.archive_suffix }}.zip" "${{ matrix.artifact_name }}" LICENSE)
 
-      - name: Release macOS artifacts
-        if: runner.os == 'macOS'
-        uses: softprops/action-gh-release@v2
+      - name: Release ZIP archive
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
-          name: Release ${{ github.ref_name }}
-          files: |
-            ./build/${{ matrix.asset_name }}.app.zip
-            ./build/${{ matrix.dmg_name }}
+          name: ${{ github.ref_name }}
+          files: ./build/spreadsheet_analyzer_${{ github.ref_name }}_${{ matrix.archive_suffix }}.zip
