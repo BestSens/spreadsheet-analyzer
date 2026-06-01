@@ -1,4 +1,4 @@
-## 1.2.0 (unreleased)
+## 1.2.0 (01.06.2026)
 * fix dispay scaling issues
 * create MacOS app bundle
 * update implot to v1.0 (https://github.com/epezent/implot/releases/tag/v1.0)
