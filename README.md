@@ -2,7 +2,7 @@
 
 > Fast, hardware-accelerated CSV visualization with intelligent data aggregation.
 
-![Version](https://img.shields.io/badge/version-1.1.2-blue)
+![Version](https://img.shields.io/badge/version-1.2.1-blue)
 ![C++](https://img.shields.io/badge/C%2B%2B-23-orange)
 ![License](https://img.shields.io/badge/license-see%20LICENSE-green)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
