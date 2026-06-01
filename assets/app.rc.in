@@ -14,7 +14,7 @@ BEGIN
       VALUE "FileDescription",  "\0"
       VALUE "FileVersion",      "@PROJECT_VERSION_MAJOR@.@PROJECT_VERSION_MINOR@.@PROJECT_VERSION_PATCH@.0\0"
       VALUE "InternalName",     "\0"
-      VALUE "LegalCopyright",   "(C)2025 METAX Kupplungs- und Dichtungstechnik GmbH\0"
+      VALUE "LegalCopyright",   "(C)2026 METAX Kupplungs- und Dichtungstechnik GmbH\0"
       VALUE "OriginalFilename", "spreadsheet_analyzer.exe\0"
       VALUE "ProductName",      "Spreadsheet Analyzer\0"
       VALUE "ProductVersion",   "@PROJECT_VERSION_MAJOR@.@PROJECT_VERSION_MINOR@.@PROJECT_VERSION_PATCH@.0\0"
