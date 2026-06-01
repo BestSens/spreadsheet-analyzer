@@ -232,7 +232,9 @@ public:
 			return paths.front().filename().string();
 		}();
 
-		this->setWindowTitle(getUniqueWindowTitle(temp_title));
+			if (this->getWindowTitle().empty()) {
+				this->setWindowTitle(getUniqueWindowTitle(temp_title));
+			}
 		this->required_files = paths.size();
 
 		// NOLINTNEXTLINE(bugprone-exception-escape)
