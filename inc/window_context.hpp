@@ -219,6 +219,10 @@ public:
 			return;
 		}
 
+		// Reset per-load state so retries do not accumulate old progress.
+		*this->finished_files = 0;
+		*this->stop_loading = false;
+
 		this->stored_paths = paths;
 		this->stored_fn    = fn;
 		this->needs_config_dialog  = false;
