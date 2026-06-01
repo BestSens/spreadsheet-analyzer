@@ -34,6 +34,7 @@ namespace {
 		Library{"roboto", "google", "https://fonts.google.com/specimen/Roboto"},
 		Library{"fast_float", "fastfloat", "https://github.com/fastfloat/fast_float"},
 		Library{"Font-Awesome", "FortAwesome", "https://github.com/FortAwesome/Font-Awesome"},
+		Library{"date", "HowardHinnant", "https://github.com/HowardHinnant/date"},
 	};
 }
 

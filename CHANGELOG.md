@@ -13,6 +13,7 @@
 * add timezone support to timestamp parsing, e.g. `2025-03-14T15:09:26+01:00` or `2025-03-14 15:09:26Z`
 * fix time extends when enabling global x-link the first time
 * add menu entry for manual import
+* add HowardHinnant/date for portable date parsing
 
 ## 1.1.1 (23.03.2026)
 * fix generation of unique file titles to work on more circumstances
