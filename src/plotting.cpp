@@ -518,6 +518,8 @@ namespace {
 		switch (col.data_type) {
 			using enum data_type_t;
 		case BOOLEAN:
+			spec.FillColor = plot_color;
+			spec.FillAlpha = 0.8f;
 			spec.LineWeight = 0.8f;
 			spec.Size = 50.0f;
 			ImPlot::PlotDigitalG(col.name.c_str(), plotDict, &plot_data, padded_count, spec);
@@ -527,20 +529,21 @@ namespace {
 				const auto shaded_name = "##" + col.name + "##shaded";
 				ImPlot::PlotLineG(col.name.c_str(), plotDictMean, &plot_data, padded_count, spec);
 
-				spec.LineWeight = 0.25f;
+				auto shaded_spec = ImPlotSpec{};
+				shaded_spec.FillAlpha = 0.5f;
 
 				if (reduction_factor >= 100) {
+					shaded_spec.FillColor = plot_color;
 					ImPlot::PlotShadedG(shaded_name.c_str(), plotDictStdMinus, &plot_data, plotDictStdPlus, &plot_data,
-										padded_count, spec);
+										padded_count, shaded_spec);
 
 				} else {
-					const auto cursor_color = getCursorColor();
-					spec.LineColor = cursor_color;
+					shaded_spec.FillColor = getCursorColor();
 					ImPlot::PlotShadedG(shaded_name.c_str(), plotDictMin, &plot_data, plotDictMax, &plot_data,
-										padded_count, spec);
+										padded_count, shaded_spec);
 				}
 			} else {
-				ImPlot::PlotLineG(col.name.c_str(), plotDict, &plot_data, padded_count);
+				ImPlot::PlotLineG(col.name.c_str(), plotDict, &plot_data, padded_count, spec);
 			}
 
 			break;
