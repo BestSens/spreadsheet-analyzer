@@ -268,6 +268,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 	while (!done) {
 		bool open_selected{false};
 		bool select_folder{false};
+		bool force_custom_import{false};
 		
 		{
 			SDL_Event event;
@@ -329,6 +330,10 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 		if (ImGui::BeginMainMenuBar()) {
 			if (ImGui::BeginMenu("File")) {
 				if (ImGui::MenuItem("Open", "Ctrl+O", &open_selected)) {}
+				if (ImGui::MenuItem("Open (Manual)")) {
+					open_selected = true;
+					force_custom_import = true;
+				}
 				if (ImGui::MenuItem("Open Folder", "Ctrl+Shift+O", &open_selected)) {
 					select_folder = true;
 				}
@@ -365,7 +370,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 			if (!paths.empty()) {
 				const auto paths_expanded = preparePaths(paths);
 				window_contexts.emplace_back(std::in_place_type<CSVWindowContext>, paths_expanded,
-				                             CSVWindowContext::function_signature{loadCSVs});
+				                             CSVWindowContext::function_signature{loadCSVs}, force_custom_import);
 			}
 		}
 
@@ -379,6 +384,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 			static int decimal_choice{1};     // 0=period 1=comma
 			static std::array<char, 64> date_fmt_buf{};
 			static int date_col_choice{0};
+			static bool first_row_is_header_choice{true};
 			static std::vector<std::string> preview_lines{};
 
 			CSVWindowContext *config_ctx{nullptr};
@@ -403,7 +409,11 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 										 inferred_config->date_format != current.date_format;
 
 					if (changed) {
-						config_ctx->retryWithConfig(*inferred_config);
+						if (config_ctx->shouldSuggestConfigInDialog()) {
+							config_ctx->applySuggestedConfig(*inferred_config);
+						} else {
+							config_ctx->retryWithConfig(*inferred_config);
+						}
 					}
 				}
 
@@ -429,6 +439,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 				copyString(std::span<char>{date_fmt_buf.data(), date_fmt_buf.size()}, popup_config.date_format);
 				date_col_choice = static_cast<int>(popup_config.date_column_index);
+				first_row_is_header_choice = popup_config.first_row_is_header;
 
 				preview_lines.clear();
 				if (!config_ctx->getStoredPaths().empty()) {
@@ -483,6 +494,10 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 				ImGui::RadioButton("Period  .##dec", &decimal_choice, 0); ImGui::SameLine();
 				ImGui::RadioButton("Comma  ,##dec", &decimal_choice, 1);
 
+				ImGui::Text("First row");  // NOLINT(hicpp-vararg)
+				ImGui::SameLine(160);
+				ImGui::Checkbox("Treat first row as header", &first_row_is_header_choice);
+
 				ImGui::Text("Date format");  // NOLINT(hicpp-vararg)
 				ImGui::SameLine(160);
 				ImGui::SetNextItemWidth(220);
@@ -515,7 +530,11 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 						std::string token;
 						int idx = 0;
 						while (std::getline(ss, token, cur_delim)) {
-							header_cols.push_back(token.empty() ? fmt::format("col {}", idx) : token);
+							if (first_row_is_header_choice) {
+								header_cols.push_back(token.empty() ? fmt::format("col {}", idx) : token);
+							} else {
+								header_cols.push_back(fmt::format("col {}", idx));
+							}
 							++idx;
 						}
 					}
@@ -558,6 +577,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 					popup_config.decimal_separator = (decimal_choice == 0) ? '.' : ',';
 					popup_config.date_format = std::string{date_fmt_buf.data(), date_fmt_buf.size()};
 					popup_config.date_column_index = static_cast<size_t>(std::max(0, date_col_choice));
+					popup_config.first_row_is_header = first_row_is_header_choice;
 					if (config_ctx != nullptr) {
 						config_ctx->retryWithConfig(popup_config);
 					}

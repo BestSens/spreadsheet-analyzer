@@ -50,4 +50,5 @@ struct csv_parse_config_t {
 	char        decimal_separator {','};
 	std::string date_format       {};    // empty = auto-detect
 	size_t      date_column_index {0};
+	bool        first_row_is_header {true};
 };

@@ -276,7 +276,11 @@ namespace {
 
 		CSVFormat format;
 		format.delimiter(config.field_delimiter);
-		format.header_row(0);
+		if (config.first_row_is_header) {
+			format.header_row(0);
+		} else {
+			format.no_header();
+		}
 		format.column_names_policy(ColumnNamePolicy::CASE_INSENSITIVE);
 
 		std::vector<std::string> col_names{};
@@ -284,10 +288,19 @@ namespace {
 
 		CSVReader reader(path.string(), format);
 
-		const auto all_col_names = reader.get_col_names();
-		const auto date_col_idx = all_col_names.empty()
-		    ? 0uz
-		    : std::min(config.date_column_index, all_col_names.size() - 1uz);
+		std::vector<std::string> all_col_names{};
+		if (config.first_row_is_header) {
+			all_col_names = reader.get_col_names();
+		} else {
+			const auto sample_lines = readSampleLines(path, 1);
+			const auto column_count = sample_lines.empty() ? 0uz : splitLine(sample_lines.front(), config.field_delimiter).size();
+			all_col_names.reserve(column_count);
+			for (size_t i = 0; i < column_count; ++i) {
+				all_col_names.push_back(fmt::format("col {}", i));
+			}
+		}
+
+		const auto date_col_idx = all_col_names.empty() ? 0uz : std::min(config.date_column_index, all_col_names.size() - 1uz);
 
 		for (size_t i = 0; i < all_col_names.size(); ++i) {
 			if (i == date_col_idx) {
@@ -298,7 +311,7 @@ namespace {
 				continue;
 			}
 
-			const auto [name, unit] = stripUnit(header_string);
+			const auto [name, unit] = config.first_row_is_header ? stripUnit(header_string) : std::pair{header_string, std::string{}};
 
 			values[header_string] = {.name = name, .unit = unit, .data = {}};
 			col_names.push_back(header_string);
@@ -323,7 +336,8 @@ namespace {
 
 				for (size_t col = 0; const auto &col_name : col_names) {
 					try {
-						const auto val = row[col_name].get<std::string>();
+						const auto source_col_idx = col >= date_col_idx ? col + 1 : col;
+						const auto val = config.first_row_is_header ? row[col_name].get<std::string>() : row[source_col_idx].get<std::string>();
 						double dbl_val{std::numeric_limits<double>::quiet_NaN()};
 
 						const auto result =

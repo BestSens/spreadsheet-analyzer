@@ -120,9 +120,10 @@ public:
 	CSVWindowContext() = default;
 	explicit CSVWindowContext(std::vector<data_dict_t> new_data) : data{std::move(new_data)} {}
 
-	CSVWindowContext(const std::vector<std::filesystem::path> &paths, const function_signature& loading_fn) {
+	CSVWindowContext(const std::vector<std::filesystem::path> &paths, const function_signature& loading_fn,
+	                 bool force_config_dialog = false) {
 		spdlog::debug("Creating csv window context with UUID: {}", this->getUUID());
-		this->loadFiles(paths, loading_fn);
+		this->loadFiles(paths, loading_fn, force_config_dialog);
 	}
 
 	~CSVWindowContext() override {
@@ -148,7 +149,8 @@ public:
 		: WindowContext(std::move(other)), data{std::move(other.data)}, global_x_link{other.global_x_link},
 		  stored_paths{std::move(other.stored_paths)}, stored_fn{std::move(other.stored_fn)},
 		  current_config{other.current_config}, needs_config_dialog{other.needs_config_dialog},
-		  config_popup_opened{other.config_popup_opened} {
+		  config_popup_opened{other.config_popup_opened},
+		  suggest_config_in_dialog{other.suggest_config_in_dialog} {
 		std::swap(this->finished_files, other.finished_files);
 		std::swap(this->stop_loading, other.stop_loading);
 		std::swap(this->data_dict_f, other.data_dict_f);
@@ -166,6 +168,7 @@ public:
 			this->current_config       = other.current_config;
 			this->needs_config_dialog  = other.needs_config_dialog;
 			this->config_popup_opened  = other.config_popup_opened;
+			this->suggest_config_in_dialog = other.suggest_config_in_dialog;
 
 			std::swap(this->finished_files, other.finished_files);
 			std::swap(this->stop_loading, other.stop_loading);
@@ -214,7 +217,8 @@ public:
 		WindowContext::scheduleForDeletion();
 	}
 
-	auto loadFiles(const std::vector<std::filesystem::path> &paths, const function_signature &fn) -> void {
+	auto loadFiles(const std::vector<std::filesystem::path> &paths, const function_signature &fn,
+	               bool force_config_dialog = false) -> void {
 		if (paths.empty()) {
 			return;
 		}
@@ -227,6 +231,7 @@ public:
 		this->stored_fn    = fn;
 		this->needs_config_dialog  = false;
 		this->config_popup_opened  = false;
+		this->suggest_config_in_dialog = force_config_dialog;
 		this->parse_error_sample->clear();
 
 		const auto temp_title = [&paths]() -> std::string {
@@ -240,6 +245,11 @@ public:
 				this->setWindowTitle(getUniqueWindowTitle(temp_title));
 			}
 		this->required_files = paths.size();
+
+		if (force_config_dialog) {
+			this->needs_config_dialog = true;
+			return;
+		}
 
 		// NOLINTNEXTLINE(bugprone-exception-escape)
 		this->data_dict_f = std::async(
@@ -276,15 +286,18 @@ public:
 
 	[[nodiscard]] auto needsConfigDialog() const -> bool { return this->needs_config_dialog; }
 	[[nodiscard]] auto isConfigPopupOpened() const -> bool { return this->config_popup_opened; }
+	[[nodiscard]] auto shouldSuggestConfigInDialog() const -> bool { return this->suggest_config_in_dialog; }
 	auto markPopupOpened() -> void { this->config_popup_opened = true; }
 	[[nodiscard]] auto getParseErrorSample() const -> std::string_view { return *this->parse_error_sample; }
 	[[nodiscard]] auto getStoredPaths() const -> const std::vector<std::filesystem::path> & { return this->stored_paths; }
 	[[nodiscard]] auto getCurrentConfig() const -> const csv_parse_config_t & { return this->current_config; }
+	auto applySuggestedConfig(csv_parse_config_t config) -> void { this->current_config = std::move(config); }
 
 	auto retryWithConfig(csv_parse_config_t config) -> void {
 		this->current_config      = std::move(config);
 		this->needs_config_dialog = false;
 		this->config_popup_opened = false;
+		this->suggest_config_in_dialog = false;
 		this->loadFiles(this->stored_paths, this->stored_fn);
 	}
 
@@ -339,4 +352,5 @@ private:
 	std::shared_ptr<std::string> parse_error_sample{std::make_shared<std::string>()};
 	bool needs_config_dialog{false};
 	bool config_popup_opened{false};
+	bool suggest_config_in_dialog{false};
 };
