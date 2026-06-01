@@ -54,6 +54,7 @@ namespace {
 		"%m/%d/%Y %H:%M:%S"
 	};
 
+	#ifdef HAVE_STD_CHRONO_PARSE
 	auto formatHasTimezone(const std::string_view format) -> bool {
 		for (size_t i = 0; i < format.size(); ++i) {
 			if (format[i] != '%') {
@@ -125,6 +126,7 @@ namespace {
 		ss >> std::ws;
 		return ss.eof();
 	}
+	#endif
 
 	auto buildFormatList(const csv_parse_config_t& config) -> std::vector<std::string_view> {
 		if (!config.date_format.empty()) {
