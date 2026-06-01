@@ -18,17 +18,14 @@ jobs:
         include:
           - os: windows-latest
             build_type: Release
-            artifact_name: spreadsheet_analyzer_Windows_x86_64.exe
             archive_suffix: windows-x86_64
 
           - os: ubuntu-latest
             build_type: Release
-            artifact_name: spreadsheet_analyzer_Linux-x86_64
             archive_suffix: linux-x86_64
 
           - os: macos-latest
             build_type: Release
-            artifact_name: spreadsheet_analyzer_macOS-ARM64.app
             archive_suffix: macos-arm64
 
     steps:
@@ -99,18 +96,26 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path build/package -Force | Out-Null
-          Copy-Item "build/${{ matrix.build_type }}/${{ matrix.artifact_name }}" "build/package/"
+          Copy-Item "build/${{ matrix.build_type }}/spreadsheet_analyzer.exe" "build/package/"
           Copy-Item "LICENSE" "build/package/"
           $archiveName = "spreadsheet_analyzer_${{ github.ref_name }}_${{ matrix.archive_suffix }}.zip"
           Compress-Archive -Path "build/package/*" -DestinationPath "build/$archiveName" -Force
 
-      - name: Package release archive (macOS/Linux)
-        if: runner.os != 'Windows'
+      - name: Package release archive (Linux)
+        if: runner.os == 'Linux'
         run: |
           mkdir -p build/package
-          cp -r build/${{ matrix.artifact_name }} build/package/
+          cp build/spreadsheet_analyzer build/package/
           cp LICENSE build/package/
-          (cd build/package && zip -r "../spreadsheet_analyzer_${{ github.ref_name }}_${{ matrix.archive_suffix }}.zip" "${{ matrix.artifact_name }}" LICENSE)
+          (cd build/package && zip -r "../spreadsheet_analyzer_${{ github.ref_name }}_${{ matrix.archive_suffix }}.zip" spreadsheet_analyzer LICENSE)
+
+      - name: Package release archive (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p build/package
+          cp -R build/spreadsheet_analyzer.app build/package/
+          cp LICENSE build/package/
+          (cd build/package && zip -r "../spreadsheet_analyzer_${{ github.ref_name }}_${{ matrix.archive_suffix }}.zip" spreadsheet_analyzer.app LICENSE)
 
       - name: Release ZIP archive
         uses: softprops/action-gh-release@v3
