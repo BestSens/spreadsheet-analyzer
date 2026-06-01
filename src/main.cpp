@@ -506,6 +506,8 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 					// NOLINTNEXTLINE(hicpp-vararg)
 					ImGui::SetTooltip(
 						"strptime format string, e.g.:\n"
+						"  %%Y-%%m-%%d %%H:%%M:%%S%%Ez\n"
+						"  %%Y-%%m-%%d %%H:%%M:%%S%%z\n"
 						"  %%Y-%%m-%%d %%H:%%M:%%S\n"
 						"  %%d.%%m.%%Y %%H:%%M:%%S\n"
 						"  %%Y-%%m-%%dT%%H:%%M:%%S\n"

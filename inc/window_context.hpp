@@ -90,7 +90,7 @@ public:
 		if (this->implot_context == nullptr) {
 			this->implot_context = ImPlot::CreateContext();
 			ImPlot::SetCurrentContext(this->implot_context);
-			ImPlot::GetStyle().UseLocalTime = false;
+			ImPlot::GetStyle().UseLocalTime = true;
 			ImPlot::GetStyle().UseISO8601 = true;
 			ImPlot::GetStyle().Use24HourClock = true;
 			ImPlot::GetStyle().FitPadding = ImVec2(0.025f, 0.1f);

@@ -34,6 +34,18 @@
 
 namespace {
 	constexpr auto default_date_formats = std::array{
+		"%Y/%m/%d %H:%M:%S%Ez",
+		"%Y/%m/%d %H:%M:%S%z",
+		"%Y-%m-%d %H:%M:%S%Ez",
+		"%Y-%m-%d %H:%M:%S%z",
+		"%Y-%m-%dT%H:%M:%S%Ez",
+		"%Y-%m-%dT%H:%M:%S%z",
+		"%d.%m.%Y %H:%M:%S%Ez",
+		"%d.%m.%Y %H:%M:%S%z",
+		"%d/%m/%Y %H:%M:%S%Ez",
+		"%d/%m/%Y %H:%M:%S%z",
+		"%m/%d/%Y %H:%M:%S%Ez",
+		"%m/%d/%Y %H:%M:%S%z",
 		"%Y/%m/%d %H:%M:%S",
 		"%Y-%m-%d %H:%M:%S",
 		"%Y-%m-%dT%H:%M:%S",
@@ -41,6 +53,78 @@ namespace {
 		"%d/%m/%Y %H:%M:%S",
 		"%m/%d/%Y %H:%M:%S"
 	};
+
+	auto formatHasTimezone(const std::string_view format) -> bool {
+		for (size_t i = 0; i < format.size(); ++i) {
+			if (format[i] != '%') {
+				continue;
+			}
+
+			if (i + 1 >= format.size()) {
+				break;
+			}
+
+			const auto spec = format[i + 1];
+			if (spec == '%') {
+				++i;
+				continue;
+			}
+
+			if (spec == 'z' || spec == 'Z') {
+				return true;
+			}
+
+			if ((spec == 'E' || spec == 'O') && i + 2 < format.size()) {
+				const auto ext_spec = format[i + 2];
+				if (ext_spec == 'z' || ext_spec == 'Z') {
+					return true;
+				}
+			}
+		}
+
+		return false;
+	}
+
+	auto parseSysSecondsStrict(const std::string& value, const std::string_view format, std::chrono::sys_seconds& out_tp) -> bool {
+		std::istringstream ss{value};
+		ss >> std::chrono::parse(std::string{format}, out_tp);
+		if (ss.fail()) {
+			return false;
+		}
+
+		ss >> std::ws;
+		return ss.eof();
+	}
+
+	auto localSecondsToTimeT(const std::chrono::local_seconds local_tp) -> time_t {
+		using namespace std::chrono;
+
+		const auto day_point = floor<days>(local_tp);
+		const auto ymd = year_month_day{day_point};
+		const auto time_of_day = hh_mm_ss{local_tp - day_point};
+
+		std::tm tm{};
+		tm.tm_year = static_cast<int>(ymd.year()) - 1900;
+		tm.tm_mon = static_cast<int>(static_cast<unsigned>(ymd.month())) - 1;
+		tm.tm_mday = static_cast<int>(static_cast<unsigned>(ymd.day()));
+		tm.tm_hour = static_cast<int>(time_of_day.hours().count());
+		tm.tm_min = static_cast<int>(time_of_day.minutes().count());
+		tm.tm_sec = static_cast<int>(time_of_day.seconds().count());
+		tm.tm_isdst = -1;
+
+		return std::mktime(&tm);
+	}
+
+	auto parseLocalSecondsStrict(const std::string& value, const std::string_view format, std::chrono::local_seconds& out_tp) -> bool {
+		std::istringstream ss{value};
+		ss >> std::chrono::parse(std::string{format}, out_tp);
+		if (ss.fail()) {
+			return false;
+		}
+
+		ss >> std::ws;
+		return ss.eof();
+	}
 
 	auto buildFormatList(const csv_parse_config_t& config) -> std::vector<std::string_view> {
 		if (!config.date_format.empty()) {
@@ -92,10 +176,14 @@ namespace {
 		char *result = strptime(std::string{value}.c_str(), format.data(), &tm);
 		return result != nullptr && *result == '\0';
 #else
-		std::istringstream ss{std::string{value}};
-		std::chrono::sys_seconds tp{};
-		ss >> std::chrono::parse(std::string{format}, tp);
-		return !ss.fail();
+		const auto owned_value = std::string{value};
+		if (formatHasTimezone(format)) {
+			std::chrono::sys_seconds tp{};
+			return parseSysSecondsStrict(owned_value, format, tp);
+		}
+
+		std::chrono::local_seconds tp{};
+		return parseLocalSecondsStrict(owned_value, format, tp);
 #endif
 	}
 
@@ -240,23 +328,29 @@ namespace {
 
 		return std::mktime(&tm);
 #else
-		std::istringstream ss{};
-
-		std::chrono::sys_seconds tp{};
 		bool success = false;
+		time_t parsed_time{};
 
 		for (size_t i = 0; i < formats.size(); ++i) {
 			const auto index = (i + prefered_fmt) % formats.size();
 			const auto &fmt = formats[index];
-			ss.clear();
-			ss.str(str);
 
-			ss >> std::chrono::parse(std::string{fmt}, tp);
-
-			if (!ss.fail()) {
-				success = true;
-				prefered_fmt = index;
-				break;
+			if (formatHasTimezone(fmt)) {
+				std::chrono::sys_seconds sys_tp{};
+				if (parseSysSecondsStrict(str, fmt, sys_tp)) {
+					success = true;
+					prefered_fmt = index;
+					parsed_time = std::chrono::system_clock::to_time_t(sys_tp);
+					break;
+				}
+			} else {
+				std::chrono::local_seconds local_tp{};
+				if (parseLocalSecondsStrict(str, fmt, local_tp)) {
+					success = true;
+					prefered_fmt = index;
+					parsed_time = localSecondsToTimeT(local_tp);
+					break;
+				}
 			}
 		}
 
@@ -265,7 +359,7 @@ namespace {
 			throw std::runtime_error(fmt::format("Failed to parse date: \"{}\"", str));
 		}
 
-		return std::chrono::system_clock::to_time_t(tp);
+		return parsed_time;
 #endif
 	}
 
