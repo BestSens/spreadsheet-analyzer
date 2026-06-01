@@ -10,6 +10,9 @@
 * make header parsing case-insensitive
 * update fast_float to v8.2.5 (https://github.com/fastfloat/fast_float/releases/tag/v8.2.5)
 * also allow bracketed units in header parsing, e.g. `Time (s)` or `Time [s]`
+* add timezone support to timestamp parsing, e.g. `2025-03-14T15:09:26+01:00` or `2025-03-14 15:09:26Z`
+* fix time extends when enabling global x-link the first time
+* add menu entry for manual import
 
 ## 1.1.1 (23.03.2026)
 * fix generation of unique file titles to work on more circumstances
