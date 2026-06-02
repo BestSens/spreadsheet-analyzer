@@ -1,4 +1,5 @@
 ## 1.2.1 (unreleased)
+* fix unit detection with nested parentheses, e.g. `Time (s (seconds))`
 
 ## 1.2.0 (01.06.2026)
 * fix dispay scaling issues
