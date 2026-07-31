@@ -359,15 +359,18 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 					select_folder = true;
 				}
 				if (ImGui::BeginMenu("Recent Files", !app_state.recent_files.empty())) {
-					for (const auto &entry : app_state.recent_files) {
-						const auto label = getRecentFileLabel(entry);
-						if (ImGui::MenuItem(label.c_str())) {
+					const auto labels = getRecentFileLabels(app_state.recent_files);
+					for (size_t recent_idx = 0; recent_idx < app_state.recent_files.size(); ++recent_idx) {
+						const auto &entry = app_state.recent_files[recent_idx];
+						ImGui::PushID(entry.getID().c_str());
+						if (ImGui::MenuItem(labels[recent_idx].c_str())) {
 							recent_selected = entry;
 						}
 
-						if (entry.size() == 1 && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
-							ImGui::SetTooltip("%s", entry.front().string().c_str()); // NOLINT(hicpp-vararg)
+						if (entry.paths.size() == 1 && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+							ImGui::SetTooltip("%s", entry.paths.front().string().c_str()); // NOLINT(hicpp-vararg)
 						}
+						ImGui::PopID();
 					}
 					ImGui::Separator();
 					if (ImGui::MenuItem("Clear Recent Files")) {
@@ -430,12 +433,12 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 		}
 
 		if (recent_selected.has_value()) {
-			const auto paths_expanded = preparePaths(*recent_selected);
+			const auto paths_expanded = preparePaths(recent_selected->paths);
 
 			if (!paths_expanded.empty()) {
 				window_contexts.emplace_back(std::in_place_type<CSVWindowContext>, paths_expanded,
 				                             CSVWindowContext::function_signature{loadCSVs});
-				addRecentFiles(app_state.recent_files, *recent_selected);
+				addRecentFiles(app_state.recent_files, recent_selected->paths);
 			}
 		}
 
