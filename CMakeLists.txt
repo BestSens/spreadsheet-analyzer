@@ -39,6 +39,7 @@ add_executable(spreadsheet_analyzer
 	src/textures.c
 	src/string_helpers.cpp
 	src/window_context.cpp
+	src/recent_files.cpp
 )
 
 if(APPLE)

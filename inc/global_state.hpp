@@ -5,6 +5,7 @@
 #include <utility>
 
 #include "SDL3/SDL.h"
+#include "recent_files.hpp"
 #include "window_context.hpp"
 
 
@@ -43,6 +44,7 @@ public:
 	SDL_Surface* window_icon{nullptr};
 
 	std::list<std::variant<CSVWindowContext>> window_contexts{};
+	std::vector<recent_file_entry_t> recent_files{};
 	// NOLINTEND(misc-non-private-member-variables-in-classes)
 
 private:

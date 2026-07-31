@@ -9,11 +9,37 @@
 #include <sys/types.h>
 #endif
 
+#include <cstdlib>
+#include <filesystem>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 #include "spdlog/spdlog.h"
+
+namespace {
+#ifdef _WIN32
+	auto getEnvVar(const char *name) -> std::optional<std::string> {
+		char *buffer{nullptr};
+		size_t size{};
+		if (_dupenv_s(&buffer, &size, name) != 0 || buffer == nullptr) {
+			return std::nullopt;
+		}
+		std::string value{buffer};
+		std::free(buffer);
+		return value;
+	}
+#else
+	auto getEnvVar(const char *name) -> std::optional<std::string> {
+		const char *value = std::getenv(name);
+		if (value == nullptr) {
+			return std::nullopt;
+		}
+		return std::string(value);
+	}
+#endif
+}  // namespace
 
 #ifdef __linux__
 auto executeCmd(const std::vector<std::string> &argsVector) -> void {
@@ -89,6 +115,28 @@ auto hideConsole() -> void {
 		ShowWindow(console, SW_HIDE);
 		RedrawWindow(console, nullptr, nullptr, RDW_UPDATENOW);
 	}
+#endif
+}
+
+auto getAppDataDirectory() -> std::filesystem::path {
+#ifdef _WIN32
+	if (const auto appdata = getEnvVar("APPDATA"); appdata.has_value()) {
+		return std::filesystem::path(*appdata) / "SpreadsheetAnalyzer";
+	}
+	return std::filesystem::temp_directory_path() / "SpreadsheetAnalyzer";
+#elif defined(__APPLE__)
+	if (const auto home = getEnvVar("HOME"); home.has_value()) {
+		return std::filesystem::path(*home) / "Library" / "Application Support" / "SpreadsheetAnalyzer";
+	}
+	return std::filesystem::temp_directory_path() / "SpreadsheetAnalyzer";
+#else
+	if (const auto xdg_config = getEnvVar("XDG_CONFIG_HOME"); xdg_config.has_value()) {
+		return std::filesystem::path(*xdg_config) / "spreadsheet-analyzer";
+	}
+	if (const auto home = getEnvVar("HOME"); home.has_value()) {
+		return std::filesystem::path(*home) / ".config" / "spreadsheet-analyzer";
+	}
+	return std::filesystem::temp_directory_path() / "spreadsheet-analyzer";
 #endif
 }
 

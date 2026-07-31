@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <fstream>
 #include <list>
+#include <optional>
 #include <ranges>
 #include <sstream>
 #include <string>
@@ -36,6 +37,7 @@
 #include "global_state.hpp"
 #include "imgui_extensions.hpp"
 #include "plotting.hpp"
+#include "recent_files.hpp"
 #include "winapi.hpp"
 #include "window_context.hpp"
 #include "IconsFontAwesome6.h"
@@ -179,12 +181,15 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 	auto &window_contexts = AppState::getInstance().window_contexts;
 
+	app_state.recent_files = loadRecentFiles();
+
 	{
 		const auto paths_expanded = preparePaths(commandline_paths);
 
 		if (!paths_expanded.empty()) {
 			window_contexts.emplace_back(std::in_place_type<CSVWindowContext>, paths_expanded,
 										 CSVWindowContext::function_signature{loadCSVs});
+			addRecentFiles(app_state.recent_files, commandline_paths);
 		}
 	}
 
@@ -269,6 +274,8 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 		bool open_selected{false};
 		bool select_folder{false};
 		bool force_custom_import{false};
+		std::optional<recent_file_entry_t> recent_selected{};
+		bool clear_recent_selected{false};
 		
 		{
 			SDL_Event event;
@@ -337,6 +344,23 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 				if (ImGui::MenuItem("Open Folder", "Ctrl+Shift+O", &open_selected)) {
 					select_folder = true;
 				}
+				if (ImGui::BeginMenu("Recent Files", !app_state.recent_files.empty())) {
+					for (const auto &entry : app_state.recent_files) {
+						const auto label = getRecentFileLabel(entry);
+						if (ImGui::MenuItem(label.c_str())) {
+							recent_selected = entry;
+						}
+
+						if (entry.size() == 1 && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+							ImGui::SetTooltip("%s", entry.front().string().c_str()); // NOLINT(hicpp-vararg)
+						}
+					}
+					ImGui::Separator();
+					if (ImGui::MenuItem("Clear Recent Files")) {
+						clear_recent_selected = true;
+					}
+					ImGui::EndMenu();
+				}
 				ImGui::Separator();
 				if (ImGui::MenuItem("Exit", "Ctrl+Q", &done)) {}
 				ImGui::EndMenu();
@@ -371,6 +395,21 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 				const auto paths_expanded = preparePaths(paths);
 				window_contexts.emplace_back(std::in_place_type<CSVWindowContext>, paths_expanded,
 				                             CSVWindowContext::function_signature{loadCSVs}, force_custom_import);
+				addRecentFiles(app_state.recent_files, paths);
+			}
+		}
+
+		if (clear_recent_selected) {
+			clearRecentFiles(app_state.recent_files);
+		}
+
+		if (recent_selected.has_value()) {
+			const auto paths_expanded = preparePaths(*recent_selected);
+
+			if (!paths_expanded.empty()) {
+				window_contexts.emplace_back(std::in_place_type<CSVWindowContext>, paths_expanded,
+				                             CSVWindowContext::function_signature{loadCSVs});
+				addRecentFiles(app_state.recent_files, *recent_selected);
 			}
 		}
 
