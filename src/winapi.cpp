@@ -2,6 +2,11 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#include <shlobj.h>
+#include <shobjidl.h>
+#include <algorithm>
+#include <array>
+#include <cwctype>
 #endif
 
 #ifdef __linux__
@@ -137,6 +142,63 @@ auto getAppDataDirectory() -> std::filesystem::path {
 		return std::filesystem::path(*home) / ".config" / "spreadsheet-analyzer";
 	}
 	return std::filesystem::temp_directory_path() / "spreadsheet-analyzer";
+#endif
+}
+
+auto resolveShortcut(std::filesystem::path path) -> std::filesystem::path {
+#ifdef _WIN32
+	auto extension = path.extension().wstring();
+	std::ranges::transform(extension, extension.begin(),
+							[](wchar_t c) -> wchar_t { return static_cast<wchar_t>(std::towlower(c)); });
+
+	if (extension != L".lnk") {
+		return path;
+	}
+
+	const auto hr_init = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+	const bool should_uninit = SUCCEEDED(hr_init);
+
+	auto resolved = path;
+
+	IShellLinkW *shell_link{nullptr};
+	auto hr = CoCreateInstance(CLSID_ShellLink, nullptr, CLSCTX_INPROC_SERVER, IID_IShellLinkW,
+								reinterpret_cast<void **>(&shell_link));  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
+
+	if (SUCCEEDED(hr) && shell_link != nullptr) {
+		IPersistFile *persist_file{nullptr};
+		// NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+		hr = shell_link->QueryInterface(IID_IPersistFile, reinterpret_cast<void **>(&persist_file));
+
+		if (SUCCEEDED(hr) && persist_file != nullptr) {
+			hr = persist_file->Load(path.c_str(), STGM_READ);
+
+			if (SUCCEEDED(hr)) {
+				std::array<wchar_t, MAX_PATH> target{};
+				WIN32_FIND_DATAW find_data{};
+
+				hr = shell_link->GetPath(target.data(), static_cast<int>(target.size()), &find_data, SLGP_RAWPATH);
+
+				if (SUCCEEDED(hr) && target.at(0) != L'\0') {
+					resolved = std::filesystem::path(target.data());
+				}
+			}
+
+			persist_file->Release();
+		}
+
+		shell_link->Release();
+	} else {
+		spdlog::warn("Failed to resolve shortcut '{}': error_code={}", path.string(),
+					 static_cast<unsigned long>(hr));  // NOLINT(google-runtime-int)
+	}
+
+	if (should_uninit) {
+		CoUninitialize();
+	}
+
+	return resolved;
+#else
+	return path;
 #endif
 }
 

@@ -28,6 +28,7 @@
 #include "fast_float/fast_float.h"
 #include "spdlog/spdlog.h"
 #include "string_helpers.hpp"
+#include "winapi.hpp"
 #include "utility.hpp"
 #include "uuid_generator.hpp"
 
@@ -466,6 +467,10 @@ auto preparePaths(std::vector<std::filesystem::path> paths) -> std::vector<std::
 	});
 
 	for (auto& path : paths) {
+		// resolve Windows shortcuts (.lnk) to their target; std::filesystem already
+		// follows real symlinks/junctions transparently via is_directory()/status()
+		path = resolveShortcut(path);
+
 		if (std::filesystem::is_directory(path)) {
 			for (const auto& entry : std::filesystem::directory_iterator(path)) {
 				if (entry.path().extension() == ".csv") {

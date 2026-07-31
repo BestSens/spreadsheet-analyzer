@@ -269,6 +269,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 	// Main loop
 	bool done{false};
+	std::vector<std::filesystem::path> dropped_paths{};
 
 	while (!done) {
 		bool open_selected{false};
@@ -276,6 +277,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 		bool force_custom_import{false};
 		std::optional<recent_file_entry_t> recent_selected{};
 		bool clear_recent_selected{false};
+		bool files_dropped{false};
 		
 		{
 			SDL_Event event;
@@ -316,6 +318,18 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 				if ((event.key.mod & SDL_KMOD_SHIFT) == 0) {
 					app_state.is_shift_pressed = false;
 				}
+			}
+
+			if (event.type == SDL_EVENT_DROP_BEGIN) {
+				dropped_paths.clear();
+			}
+
+			if (event.type == SDL_EVENT_DROP_FILE && event.drop.data != nullptr) {
+				dropped_paths.emplace_back(event.drop.data);
+			}
+
+			if (event.type == SDL_EVENT_DROP_COMPLETE) {
+				files_dropped = true;
 			}
 
 			if (event.type == SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED) {
@@ -397,6 +411,18 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 				                             CSVWindowContext::function_signature{loadCSVs}, force_custom_import);
 				addRecentFiles(app_state.recent_files, paths);
 			}
+		}
+
+		if (files_dropped && !dropped_paths.empty()) {
+			const auto paths_expanded = preparePaths(dropped_paths);
+
+			if (!paths_expanded.empty()) {
+				window_contexts.emplace_back(std::in_place_type<CSVWindowContext>, paths_expanded,
+											 CSVWindowContext::function_signature{loadCSVs});
+				addRecentFiles(app_state.recent_files, dropped_paths);
+			}
+
+			dropped_paths.clear();
 		}
 
 		if (clear_recent_selected) {
