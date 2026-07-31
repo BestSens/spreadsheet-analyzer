@@ -27,6 +27,9 @@ struct data_dict_t {
 	bool visible{false};
 	data_type_t data_type{data_type_t::FLOAT};
 
+	// 0 = auto-assign, 1/2/3 = explicit Y1/Y2/Y3. Multiple columns may share the same axis.
+	int y_axis{0};
+
 	std::shared_ptr<std::vector<time_t>> timestamp{std::make_shared<std::vector<time_t>>()};
 	time_t delta_t{};
 	std::shared_ptr<std::vector<double>> data{std::make_shared<std::vector<double>>()};

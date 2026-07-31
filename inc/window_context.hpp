@@ -137,7 +137,8 @@ public:
 
 	CSVWindowContext(const CSVWindowContext &other)
 		: WindowContext(std::move(other)), data{other.data}, global_x_link{other.global_x_link},
-		  last_local_x_range{other.last_local_x_range}, force_subplot{other.force_subplot} {};
+		  last_local_x_range{other.last_local_x_range}, force_subplot{other.force_subplot},
+		  force_single_plot{other.force_single_plot} {};
 
 	auto operator=(const CSVWindowContext &other) -> CSVWindowContext & {
 		if (this != &other) {
@@ -145,6 +146,7 @@ public:
 			this->global_x_link = other.global_x_link;
 			this->last_local_x_range = other.last_local_x_range;
 			this->force_subplot = other.force_subplot;
+			this->force_single_plot = other.force_single_plot;
 		}
 
 		return *this;
@@ -153,6 +155,7 @@ public:
 	CSVWindowContext(CSVWindowContext &&other) noexcept
 		: WindowContext(std::move(other)), data{std::move(other.data)}, global_x_link{other.global_x_link},
 		  last_local_x_range{other.last_local_x_range}, force_subplot{other.force_subplot},
+		  force_single_plot{other.force_single_plot},
 		  stored_paths{std::move(other.stored_paths)}, stored_fn{std::move(other.stored_fn)},
 		  current_config{other.current_config}, needs_config_dialog{other.needs_config_dialog},
 		  config_popup_opened{other.config_popup_opened},
@@ -171,6 +174,7 @@ public:
 			this->global_x_link = other.global_x_link;
 			this->last_local_x_range = other.last_local_x_range;
 			this->force_subplot = other.force_subplot;
+			this->force_single_plot = other.force_single_plot;
 			this->stored_paths  = std::move(other.stored_paths);
 			this->stored_fn     = std::move(other.stored_fn);
 			this->current_config       = other.current_config;
@@ -218,6 +222,14 @@ public:
 
 	[[nodiscard]] auto getForceSubplot() const -> bool {
 		return this->force_subplot;
+	}
+
+	auto getForceSinglePlotRef() -> bool & {
+		return this->force_single_plot;
+	}
+
+	[[nodiscard]] auto getForceSinglePlot() const -> bool {
+		return this->force_single_plot;
 	}
 
 	auto setLastLocalXRange(const std::pair<double, double> &range) -> void {
@@ -354,6 +366,7 @@ private:
 	std::pair<double, double> last_local_x_range{std::numeric_limits<double>::quiet_NaN(),
 											 std::numeric_limits<double>::quiet_NaN()};
 	bool force_subplot{false};
+	bool force_single_plot{false};
 	std::future<std::vector<data_dict_t>> data_dict_f{};
 
 	// should be fine to use these without locking as they are only written on one thread

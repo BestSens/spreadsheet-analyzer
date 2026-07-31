@@ -643,6 +643,18 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 					ImGui::SetTooltip("Force subplots");  // NOLINT(hicpp-vararg)
 				}
 
+				bool& force_single_plot = ctx.getForceSinglePlotRef();
+
+				if (ImGui::MenuItem(ICON_FA_CHART_LINE, nullptr, &force_single_plot) && !force_single_plot) {
+					for (auto &dct : dict) {
+						dct.y_axis = 0;
+					}
+				}
+
+				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+					ImGui::SetTooltip("Combine into one graph");  // NOLINT(hicpp-vararg)
+				}
+
 				if (ImGui::MenuItem(ICON_FA_CLONE, nullptr, nullptr, !loading_status.is_loading)) {
 					window_contexts.emplace_back(ctx);
 				}
@@ -672,9 +684,20 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 					ImGui::BeginChild("Column List", ImVec2(250, window_content_size.y));
 					const auto subwindow_size = ImGui::GetContentRegionAvail();
 					if (ImGui::BeginListBox("##List Box", ImVec2(subwindow_size.x, subwindow_size.y))) {
+						const auto show_axis_picker = ctx.getForceSinglePlot();
+
 						for (auto &dct : dict) {
+							ImGui::PushID(dct.uuid.c_str());
+
+							const auto axis_button_width = 34.0f;
+							const auto selectable_width =
+								show_axis_picker ? std::max(ImGui::GetContentRegionAvail().x - axis_button_width -
+																 ImGui::GetStyle().ItemSpacing.x,
+															 0.0f)
+												  : 0.0f;
+
 							const auto list_id = dct.name + "##" + dct.uuid;
-							if (ImGui::Selectable(list_id.c_str(), &dct.visible)) {
+							if (ImGui::Selectable(list_id.c_str(), &dct.visible, 0, ImVec2(selectable_width, 0))) {
 								if (app_state.is_ctrl_pressed) {
 									break;
 								}
@@ -703,6 +726,49 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 								std::ranges::for_each(dict, [](auto &tmp) -> void { tmp.visible = false; });
 								dct.visible = true;
 							}
+
+							if (show_axis_picker) {
+								ImGui::SameLine();
+
+								const auto axis_label = [](int y_axis) -> const char * {
+									switch (y_axis) {
+									case 1:
+										return "Y1";
+									case 2:
+										return "Y2";
+									case 3:
+										return "Y3";
+									default:
+										return "auto";
+									}
+								}(dct.y_axis);
+
+								if (ImGui::SmallButton(axis_label)) {
+									ImGui::OpenPopup("##axis_popup");
+								}
+
+								if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+									ImGui::SetTooltip("Y-axis for this measurement");  // NOLINT(hicpp-vararg)
+								}
+
+								if (ImGui::BeginPopup("##axis_popup")) {
+									if (ImGui::Selectable("Auto", dct.y_axis == 0)) {
+										dct.y_axis = 0;
+									}
+									if (ImGui::Selectable("Y1 (left)", dct.y_axis == 1)) {
+										dct.y_axis = 1;
+									}
+									if (ImGui::Selectable("Y2 (right)", dct.y_axis == 2)) {
+										dct.y_axis = 2;
+									}
+									if (ImGui::Selectable("Y3 (right)", dct.y_axis == 3)) {
+										dct.y_axis = 3;
+									}
+									ImGui::EndPopup();
+								}
+							}
+
+							ImGui::PopID();
 						}
 						ImGui::EndListBox();
 					}

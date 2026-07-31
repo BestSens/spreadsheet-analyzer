@@ -568,16 +568,20 @@ namespace {
 		drawTag(col, plot_color);
 	}
 
-	auto getFormatString(const data_dict_t &col) -> std::string {
-		if (col.unit.empty()) {
+	auto getFormatString(const std::string &unit) -> std::string {
+		if (unit.empty()) {
 			return "%g";
 		}
 
-		if (col.unit == "%") {
+		if (unit == "%") {
 			return "%g%%";
 		}
 
-		return "%g " + col.unit;
+		return "%g " + unit;
+	}
+
+	auto getFormatString(const data_dict_t &col) -> std::string {
+		return getFormatString(col.unit);
 	}
 
 	struct axes_spec_t {
@@ -586,15 +590,51 @@ namespace {
 		data_dict_t *col{nullptr};
 	};
 
+	// axis_num: 0 = auto-assign, 1/2/3 = explicit Y1/Y2/Y3.
+	auto axisNumberToImAxis(int axis_num) -> ImAxis {
+		switch (axis_num) {
+		case 2:
+			return ImAxis_Y2;
+		case 3:
+			return ImAxis_Y3;
+		default:
+			return ImAxis_Y1;
+		}
+	}
+
+	struct pending_axis_col_t {
+		data_dict_t *col;
+		int axis_num;
+	};
+
+	// Resolves each visible/plottable column to an explicit axis number (1/2/3), auto-assigning
+	// columns without an explicit choice round-robin across the 3 available axes so several
+	// columns can end up sharing the same one.
+	auto resolveAxisAssignments(std::vector<data_dict_t> &data) -> std::vector<pending_axis_col_t> {
+		std::vector<pending_axis_col_t> pending{};
+		pending.reserve(data.size());
+
+		auto auto_counter = 0;
+		for (auto &col : data) {
+			if (!col.visible || col.timestamp->empty()) {
+				continue;
+			}
+
+			auto axis_num = col.y_axis;
+			if (axis_num < 1 || axis_num > 3) {
+				axis_num = (auto_counter % 3) + 1;
+				++auto_counter;
+			}
+
+			pending.push_back({.col = &col, .axis_num = axis_num});
+		}
+
+		return pending;
+	}
+
 	auto prepareAxes(std::vector<std::string> &assigned_plot_ids, std::vector<data_dict_t> &data,
 					 const std::vector<ImVec4> &color_map, const bool is_x_linked) -> std::vector<axes_spec_t> {
 		auto &app_state = AppState::getInstance();
-
-		static constexpr auto axes = std::array{
-			ImAxis_Y1,
-			ImAxis_Y2,
-			ImAxis_Y3
-		};
 
 		ImPlot::SetupAxis(ImAxis_X1, "date", ImPlotAxisFlags_NoLabel);
 		ImPlot::SetupAxisScale(ImAxis_X1, ImPlotScale_Time);
@@ -620,39 +660,92 @@ namespace {
 		ImPlot::SetupAxisLimits(ImAxis_X1, date_lims.first, date_lims.second,
 								require_reset ? ImGuiCond_Always : ImGuiCond_Once);
 
-		std::vector<axes_spec_t> axes_specs{};
-		axes_specs.reserve(3);
+		const auto pending = resolveAxisAssignments(data);
 
 		const auto old_assigned_plot_ids = assigned_plot_ids;
-		assigned_plot_ids.clear();
+		std::vector<std::string> new_assigned_plot_ids{};
+		new_assigned_plot_ids.reserve(pending.size());
 
-		for (size_t i = 0; auto &col : data) {
-			if (!col.visible) {
+		for (auto axis_num = 1; axis_num <= 3; ++axis_num) {
+			auto cols_on_axis = std::vector<data_dict_t *>{};
+			for (const auto &item : pending) {
+				if (item.axis_num == axis_num) {
+					cols_on_axis.push_back(item.col);
+				}
+			}
+
+			if (cols_on_axis.empty()) {
 				continue;
 			}
 
-			if (col.timestamp->empty()) {
-				continue;
+			const auto axis = axisNumberToImAxis(axis_num);
+			const auto id_prefix = std::to_string(axis_num) + "|";
+
+			const auto label = [&cols_on_axis]() {
+				std::string result{};
+				for (const auto *col : cols_on_axis) {
+					if (!result.empty()) {
+						result += ", ";
+					}
+					result += col->name;
+				}
+				return result;
+			}();
+
+			const auto shared_unit = [&cols_on_axis]() -> std::string {
+				const auto &first_unit = cols_on_axis.front()->unit;
+				const auto all_match =
+					std::ranges::all_of(cols_on_axis, [&first_unit](const auto *col) { return col->unit == first_unit; });
+				return all_match ? first_unit : std::string{};
+			}();
+
+			ImPlot::SetupAxis(axis, label.c_str(), axis_num % 2 == 0 ? ImPlotAxisFlags_Opposite : ImPlotAxisFlags_None);
+			ImPlot::SetupAxisFormat(axis, getFormatString(shared_unit).c_str());
+
+			auto data_min = std::numeric_limits<double>::max();
+			auto data_max = std::numeric_limits<double>::lowest();
+			for (const auto *col : cols_on_axis) {
+				const auto [col_min, col_max] = getPaddedYLims(*col);
+				data_min = std::min(data_min, col_min);
+				data_max = std::max(data_max, col_max);
 			}
 
-			if (i >= axes.size()) {
-				break;
-			}
+			const auto current_ids_on_axis = [&cols_on_axis, &id_prefix]() {
+				std::vector<std::string> ids{};
+				ids.reserve(cols_on_axis.size());
+				for (const auto *col : cols_on_axis) {
+					ids.push_back(id_prefix + col->uuid);
+				}
+				return ids;
+			}();
 
-			const auto axis = axes[i];
+			const auto previous_ids_on_axis = [&old_assigned_plot_ids, &id_prefix]() {
+				std::vector<std::string> ids{};
+				for (const auto &id : old_assigned_plot_ids) {
+					if (id.starts_with(id_prefix)) {
+						ids.push_back(id);
+					}
+				}
+				return ids;
+			}();
 
-			const axes_spec_t spec{.axis = axis, .color = color_map[i % color_map.size()], .col = &col};
-			const auto is_new_data = i < old_assigned_plot_ids.size() ? old_assigned_plot_ids[i] != col.uuid : true;
+			const auto is_new_data = current_ids_on_axis != previous_ids_on_axis;
 
-			ImPlot::SetupAxis(axis, col.name.c_str(), i % 2 != 0 ? ImPlotAxisFlags_Opposite : ImPlotAxisFlags_None);
-			ImPlot::SetupAxisFormat(axis, getFormatString(col).c_str());
+			ImPlot::SetupAxisLimits(axis, data_min, data_max, is_new_data ? ImGuiCond_Always : ImGuiCond_Once);
 
-			const auto data_lims = getPaddedYLims(col);
-			ImPlot::SetupAxisLimits(axis, data_lims.first, data_lims.second,
-									is_new_data ? ImGuiCond_Always : ImGuiCond_Once);
+			new_assigned_plot_ids.insert(new_assigned_plot_ids.end(), current_ids_on_axis.begin(),
+										 current_ids_on_axis.end());
+		}
 
-			axes_specs.push_back(spec);
-			assigned_plot_ids.push_back(col.uuid);
+		assigned_plot_ids = std::move(new_assigned_plot_ids);
+
+		std::vector<axes_spec_t> axes_specs{};
+		axes_specs.reserve(pending.size());
+
+		for (size_t i = 0; const auto &item : pending) {
+			axes_specs.push_back({.axis = axisNumberToImAxis(item.axis_num),
+								  .color = color_map[i % color_map.size()],
+								  .col = item.col});
 			++i;
 		}
 
@@ -841,7 +934,7 @@ auto plotDataInSubplots(CSVWindowContext &window_context) -> void {
 
 	const auto is_x_linked = window_context.getGlobalXLink();
 
-	if (window_context.getForceSubplot() || n_selected > 2) {
+	if (!window_context.getForceSinglePlot() && (window_context.getForceSubplot() || n_selected > 2)) {
 		const auto subplot_flags =
 			(n_selected > 1 ? ImPlotSubplotFlags_ShareItems : 0) | (!is_x_linked ? ImPlotSubplotFlags_LinkAllX : 0);
 		
