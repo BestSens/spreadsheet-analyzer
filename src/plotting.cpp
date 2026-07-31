@@ -607,26 +607,87 @@ namespace {
 		int axis_num;
 	};
 
-	// Resolves each visible/plottable column to an explicit axis number (1/2/3), auto-assigning
-	// columns without an explicit choice round-robin across the 3 available axes so several
-	// columns can end up sharing the same one.
+	struct axis_state_t {
+		bool used{false};
+		bool mixed{false};
+		std::string unit{};
+		int count{0};
+	};
+
+	// Resolves each visible/plottable column to an explicit axis number (1/2/3).
+	// Columns with an explicit choice (col.y_axis in [1,3]) keep it. Columns left on "Auto" are
+	// grouped by unit so that measurements sharing a unit end up on the same axis: each unit group
+	// first tries to join an axis that already carries that same unit, then falls back to an unused
+	// axis, and only shares a mixed-unit axis (picking the least loaded one) once all 3 are taken.
 	auto resolveAxisAssignments(std::vector<data_dict_t> &data) -> std::vector<pending_axis_col_t> {
 		std::vector<pending_axis_col_t> pending{};
 		pending.reserve(data.size());
 
-		auto auto_counter = 0;
+		std::array<axis_state_t, 3> axis_state{};
+		std::vector<data_dict_t *> auto_cols{};
+
 		for (auto &col : data) {
 			if (!col.visible || col.timestamp->empty()) {
 				continue;
 			}
 
-			auto axis_num = col.y_axis;
-			if (axis_num < 1 || axis_num > 3) {
-				axis_num = (auto_counter % 3) + 1;
-				++auto_counter;
-			}
+			if (col.y_axis >= 1 && col.y_axis <= 3) {
+				pending.push_back({.col = &col, .axis_num = col.y_axis});
 
-			pending.push_back({.col = &col, .axis_num = axis_num});
+				auto &state = axis_state[static_cast<size_t>(col.y_axis - 1)];
+				if (!state.used) {
+					state.used = true;
+					state.unit = col.unit;
+				} else if (state.unit != col.unit) {
+					state.mixed = true;
+				}
+				++state.count;
+			} else {
+				auto_cols.push_back(&col);
+			}
+		}
+
+		// Group auto columns by unit, preserving first-seen order for deterministic assignment.
+		std::vector<std::pair<std::string, std::vector<data_dict_t *>>> unit_groups{};
+		for (auto *col : auto_cols) {
+			auto it = std::ranges::find_if(unit_groups, [col](const auto &group) { return group.first == col->unit; });
+			if (it == unit_groups.end()) {
+				unit_groups.push_back({col->unit, {col}});
+			} else {
+				it->second.push_back(col);
+			}
+		}
+
+		for (const auto &[unit, cols] : unit_groups) {
+			auto axis_index = [&]() -> size_t {
+				const auto matching = std::ranges::find_if(axis_state, [&unit](const auto &state) {
+					return state.used && !state.mixed && state.unit == unit;
+				});
+				if (matching != axis_state.end()) {
+					return static_cast<size_t>(std::distance(axis_state.begin(), matching));
+				}
+
+				const auto free = std::ranges::find_if(axis_state, [](const auto &state) { return !state.used; });
+				if (free != axis_state.end()) {
+					return static_cast<size_t>(std::distance(axis_state.begin(), free));
+				}
+
+				return static_cast<size_t>(
+					std::distance(axis_state.begin(), std::ranges::min_element(axis_state, {}, &axis_state_t::count)));
+			}();
+
+			auto &state = axis_state[axis_index];
+			if (!state.used) {
+				state.used = true;
+				state.unit = unit;
+			} else if (state.unit != unit) {
+				state.mixed = true;
+			}
+			state.count += static_cast<int>(cols.size());
+
+			for (auto *col : cols) {
+				pending.push_back({.col = col, .axis_num = static_cast<int>(axis_index) + 1});
+			}
 		}
 
 		return pending;

@@ -1,6 +1,7 @@
 ## 1.2.1 (unreleased)
 * fix unit detection with nested parentheses, e.g. `Time (s (seconds))`
 * add force combine option to print all selected measurements in one plot
+* automatically merge measurements with the same unit into one y-axis
 
 ## 1.2.0 (01.06.2026)
 * fix display scaling issues
