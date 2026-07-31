@@ -1,9 +1,9 @@
 include(CPM)
 CPMAddPackage(
   NAME SDL3
-  VERSION 3.4.8
-  URL https://github.com/libsdl-org/SDL/archive/refs/tags/release-3.4.8.zip
-  URL_HASH SHA256=9ff97fce9ffb64abd071de3e177a26fa6c9f1283a56ed166889345666ba3ef9b
+  VERSION 3.4.12
+  URL https://github.com/libsdl-org/SDL/archive/refs/tags/release-3.4.12.zip
+  URL_HASH SHA256=ce4e4b92e628b376b59091fcaa7358044f4c7009b6d35be0d81abe8e1de7847a
   OPTIONS
     "SDL_STATIC ON"
     "SDL_SHARED OFF"

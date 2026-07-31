@@ -1,9 +1,9 @@
 include(CPM)
 CPMAddPackage(
   NAME date_external
-  VERSION 3.0.4
-  URL https://github.com/HowardHinnant/date/archive/refs/tags/v3.0.4.zip
-  URL_HASH SHA256=a6352ebdb440274269c746e6f66690f62ef4ab4aefeeba2ef2efee1bc2c86985
+  VERSION 3.0.5
+  URL https://github.com/HowardHinnant/date/archive/refs/tags/v3.0.5.zip
+  URL_HASH SHA256=10a18a056e6dab4cc8c20a4b3c54112e29ccaa5c389ade8fd7457a80c47b9c6d
   DOWNLOAD_ONLY YES
 )
 

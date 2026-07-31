@@ -3,6 +3,10 @@
 * add force combine option to print all selected measurements in one plot
 * automatically merge measurements with the same unit into one y-axis
 * add recent files list
+* update fast_float to v8.2.10 (https://github.com/fastfloat/fast_float/releases/tag/v8.2.10)
+* update imgui to v1.92.9 (https://github.com/ocornut/imgui/releases/tag/v1.92.9)
+* update SDL to v3.4.12 (https://github.com/libsdl-org/SDL/releases/tag/release-3.4.12)
+* update date to v3.0.5 (https://github.com/HowardHinnant/date/releases/tag/v3.0.5)
 
 ## 1.2.0 (01.06.2026)
 * fix display scaling issues
