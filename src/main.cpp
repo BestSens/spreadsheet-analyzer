@@ -734,7 +734,8 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 			if (loading_status.is_loading) {
 				const auto denominator = std::max<size_t>(loading_status.required_files, 1);
-				const auto progress_raw = static_cast<float>(loading_status.finished_files) /
+				const auto progress_raw = (static_cast<float>(loading_status.finished_files) +
+									  static_cast<float>(loading_status.current_file_progress)) /
 									  static_cast<float>(denominator);
 				const auto progress = std::clamp(progress_raw, 0.0f, 1.0f);
 				const auto label = fmt::format("{:.0f}% ({}/{})", progress * 100.0f, loading_status.finished_files,

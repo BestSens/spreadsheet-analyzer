@@ -313,8 +313,38 @@ namespace {
 		return parsed_time;
 	}
 
+	// Estimates the row count of a (possibly huge) CSV file from a small leading sample,
+	// so per-row progress can be reported without reading the whole file up front.
+	auto estimateRowCount(const std::filesystem::path &path) -> size_t {
+		std::error_code ec;
+		const auto file_size = std::filesystem::file_size(path, ec);
+		if (ec || file_size == 0) {
+			return 1;
+		}
+
+		std::ifstream input(path, std::ios::binary);
+		if (!input) {
+			return 1;
+		}
+
+		constexpr size_t sample_size = 65536;
+		std::string buffer(std::min<uintmax_t>(sample_size, file_size), '\0');
+		input.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+		const auto bytes_read = static_cast<size_t>(input.gcount());
+		const auto newline_count =
+			static_cast<size_t>(std::count(buffer.begin(), buffer.begin() + static_cast<long>(bytes_read), '\n'));
+
+		if (bytes_read == 0 || newline_count == 0) {
+			return 1;
+		}
+
+		const auto avg_bytes_per_row = static_cast<double>(bytes_read) / static_cast<double>(newline_count);
+		return std::max<size_t>(1, static_cast<size_t>(static_cast<double>(file_size) / avg_bytes_per_row));
+	}
+
 	auto loadCSV(const std::filesystem::path &path, const std::atomic<bool> &stop_loading,
-	             const csv_parse_config_t &config, std::string &parse_error_sample)
+	             const csv_parse_config_t &config, std::string &parse_error_sample,
+	             double &current_file_progress)
 		-> std::unordered_map<std::string, immediate_dict> {
 		using namespace csv;
 
@@ -373,7 +403,15 @@ namespace {
 		std::vector<bool> col_error_shown(col_names.size(), false);
 		size_t prefered_date_fmt = 0;
 
+		const auto estimated_total_rows = estimateRowCount(path);
+		constexpr size_t progress_update_interval = 256;
+
 		for (size_t line = 0; auto &row : reader) {
+			if (line % progress_update_interval == 0) {
+				current_file_progress =
+					std::min(1.0, static_cast<double>(line) / static_cast<double>(estimated_total_rows));
+			}
+
 			try {
 				const auto date_str = row[date_col_idx].get<std::string>();
 				const auto date = parseDate(date_str, prefered_date_fmt, fmt_list);
@@ -486,7 +524,8 @@ auto preparePaths(std::vector<std::filesystem::path> paths) -> std::vector<std::
 }
 
 auto loadCSVs(const std::vector<std::filesystem::path>& paths, size_t& finished, const std::atomic<bool>& stop_loading,
-			  const csv_parse_config_t& config, std::string& parse_error_out) -> std::vector<data_dict_t> {
+			  const csv_parse_config_t& config, std::string& parse_error_out,
+			  double& current_file_progress) -> std::vector<data_dict_t> {
 	if (paths.empty()) {
 		return {};
 	}
@@ -507,14 +546,16 @@ auto loadCSVs(const std::vector<std::filesystem::path>& paths, size_t& finished,
 		contexts.push_back({.index = ++i, .path = path});
 	}
 
-	auto fn = [&contexts, &stop_loading, &finished, &config, &parse_error_out](auto &ctx) {
+	auto fn = [&contexts, &stop_loading, &finished, &config, &parse_error_out, &current_file_progress](auto &ctx) {
 		if (!stop_loading) {
+			current_file_progress = 0.0;
 			spdlog::info("Loading file: {} ({}/{})...", ctx.path.filename().string(), ctx.index, contexts.size());
 			try {
-				ctx.values = loadCSV(ctx.path, stop_loading, config, parse_error_out);
+				ctx.values = loadCSV(ctx.path, stop_loading, config, parse_error_out, current_file_progress);
 			} catch (const std::exception &e) {
 				spdlog::error("{}", e.what());
 			}
+			current_file_progress = 0.0;
 			++finished;
 		}
 	};

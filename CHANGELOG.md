@@ -1,5 +1,6 @@
 ## 1.2.2 (unreleased)
 * add drag and drop support
+* improve progress indicator when loading large files
 
 ## 1.2.1 (31.07.2026)
 * fix unit detection with nested parentheses, e.g. `Time (s (seconds))`

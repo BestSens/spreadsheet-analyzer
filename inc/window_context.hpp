@@ -115,7 +115,7 @@ private:
 class CSVWindowContext : public WindowContext {
 public:
 	using function_signature = std::function<std::vector<data_dict_t>(
-		std::vector<std::filesystem::path>, size_t&, const bool&, const csv_parse_config_t&, std::string&)>;
+		std::vector<std::filesystem::path>, size_t&, const bool&, const csv_parse_config_t&, std::string&, double&)>;
 
 	CSVWindowContext() = default;
 	explicit CSVWindowContext(std::vector<data_dict_t> new_data) : data{std::move(new_data)} {}
@@ -161,6 +161,7 @@ public:
 		  config_popup_opened{other.config_popup_opened},
 		  suggest_config_in_dialog{other.suggest_config_in_dialog} {
 		std::swap(this->finished_files, other.finished_files);
+		std::swap(this->current_file_progress, other.current_file_progress);
 		std::swap(this->stop_loading, other.stop_loading);
 		std::swap(this->data_dict_f, other.data_dict_f);
 		std::swap(this->required_files, other.required_files);
@@ -183,6 +184,7 @@ public:
 			this->suggest_config_in_dialog = other.suggest_config_in_dialog;
 
 			std::swap(this->finished_files, other.finished_files);
+			std::swap(this->current_file_progress, other.current_file_progress);
 			std::swap(this->stop_loading, other.stop_loading);
 			std::swap(this->data_dict_f, other.data_dict_f);
 			std::swap(this->required_files, other.required_files);
@@ -253,6 +255,7 @@ public:
 
 		// Reset per-load state so retries do not accumulate old progress.
 		*this->finished_files = 0;
+		*this->current_file_progress = 0.0;
 		*this->stop_loading = false;
 
 		this->stored_paths = paths;
@@ -287,7 +290,9 @@ public:
 					auto &temp_finished_files = *this->finished_files;
 					const auto &temp_stop_loading = *this->stop_loading;
 					auto &temp_error = *this->parse_error_sample;
-					return fn(paths, temp_finished_files, temp_stop_loading, config, temp_error);
+					auto &temp_current_file_progress = *this->current_file_progress;
+					return fn(paths, temp_finished_files, temp_stop_loading, config, temp_error,
+					          temp_current_file_progress);
 				} catch (const std::exception &e) {
 					spdlog::error("error loading files for {}: {}", title, e.what());
 				} catch (...) {
@@ -339,13 +344,16 @@ public:
 		bool is_loading;
 		size_t finished_files;
 		size_t required_files;
+		double current_file_progress;
 	};
 
 	auto getLoadingStatus() -> loading_status_t {
 		const auto is_loading = this->data_dict_f.valid() &&
 								this->data_dict_f.wait_for(std::chrono::seconds(0)) != std::future_status::ready;
-		return {
-			.is_loading = is_loading, .finished_files = *this->finished_files, .required_files = this->required_files};
+		return {.is_loading = is_loading,
+		        .finished_files = *this->finished_files,
+		        .required_files = this->required_files,
+		        .current_file_progress = *this->current_file_progress};
 	}
 
 	[[nodiscard]] auto getAssignedPlotIDs() const -> std::vector<std::string> {
@@ -372,6 +380,7 @@ private:
 	// should be fine to use these without locking as they are only written on one thread
 	std::unique_ptr<bool> stop_loading{std::make_unique<bool>(false)};
 	std::unique_ptr<size_t> finished_files{std::make_unique<size_t>(0)};
+	std::unique_ptr<double> current_file_progress{std::make_unique<double>(0.0)};
 	size_t required_files{0};
 
 	std::vector<std::string> assigned_plot_ids{};
