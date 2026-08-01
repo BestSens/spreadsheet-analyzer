@@ -922,6 +922,11 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 	}
 
 	// Cleanup
+	// Tear the window contexts down here rather than leaving them to the AppState singleton: their
+	// destructors join the loading threads, log through spdlog and destroy their ImPlot contexts,
+	// none of which is still alive once static destruction runs after main returns.
+	window_contexts.clear();
+
 	ImGui_ImplSDLRenderer3_Shutdown();
 	ImGui_ImplSDL3_Shutdown();
 	ImGui::DestroyContext();
