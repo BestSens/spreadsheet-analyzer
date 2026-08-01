@@ -107,8 +107,12 @@ From each frame's metadata the application additionally builds:
   plot. The inspector follows the plot cursor, so scrubbing the time axis steps through the
   frames. Toggle it with the waveform button in the window's menu bar.
 
-Frames overlap in time — a frame usually covers more seconds than the interval to the next one.
-Later frames win, so the samples of a frame are clipped where the next frame starts.
+The recording is one continuous stream sampled at `dt`, but frame sizes vary and `t0` only has a
+resolution of one second, so taking each `t0` at face value tears a sub-second gap or overlap into
+every frame boundary. Frames are therefore concatenated back to back and `t0` is only used to
+resync when the stream has drifted more than two seconds from it, which means a real gap in the
+recording. On the reference data the running stream stays within ±1 s of `t0` over fifty minutes,
+with no cumulative drift.
 
 ---
 

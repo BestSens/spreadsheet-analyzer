@@ -20,6 +20,11 @@
 namespace {
 	constexpr size_t frame_header_size = 16;
 
+	// A frame header's t0 is a whole unix second, so a contiguous stream can appear up to one
+	// second off from where the previous frame ended. Anything beyond that is a real gap in the
+	// recording rather than the resolution of t0, and the stream is resynced to the header.
+	constexpr double resync_threshold_seconds = 2.0;
+
 	// How the samples of one raw data block are encoded.
 	enum class block_encoding_t : uint8_t {
 		SYNC,	   // 4 byte slices, 20 bit propagation delay + 12 bit amplitude
@@ -520,6 +525,10 @@ auto loadBinaryFiles(const std::vector<std::filesystem::path>& paths, size_t& fi
 	std::vector<std::vector<double>> scalar_values{};
 	std::vector<double> frame_timestamps{};
 
+	// Where the sample stream has got to, i.e. the time of the next sample if the recording
+	// simply continues. NaN until the first frame has been read.
+	auto stream_time = std::numeric_limits<double>::quiet_NaN();
+
 	glz::generic metadata{};
 
 	for (size_t file_index = 0; file_index < paths.size(); ++file_index) {
@@ -596,11 +605,26 @@ auto loadBinaryFiles(const std::vector<std::filesystem::path>& paths, size_t& fi
 
 			binary_frame_t frame{};
 			frame.type = type;
-			frame.t0 = static_cast<double>(t0);
 			frame.dt = static_cast<double>(dt_us) / 1'000'000.0;
 			frame.file_index = file_index;
 			frame.metadata_offset = metadata_offset;
 			frame.metadata_length = metadata_length;
+
+			// The recording is one continuous stream sampled at dt, but t0 only has one second
+			// resolution, so taking it at face value tears a sub-second gap or overlap into every
+			// frame boundary. Frames are therefore played back to back, and t0 is only used to
+			// resync when the two have drifted apart far enough that it must be a real gap.
+			const auto header_t0 = static_cast<double>(t0);
+			const auto continuing = std::isfinite(stream_time);
+			const auto drift = continuing ? stream_time - header_t0 : 0.0;
+			const auto resync = !continuing || std::abs(drift) > resync_threshold_seconds;
+
+			if (resync && continuing) {
+				spdlog::debug("{}: frame at offset {} is {:.3f} s off the running stream, resyncing to t0",
+							  path.filename().string(), offset, drift);
+			}
+
+			frame.t0 = resync ? header_t0 : stream_time;
 
 			// Raw data: the blocks listed for this type follow each other, each payload_length / n bytes.
 			if (payload_length % blocks.size() != 0) {
@@ -625,6 +649,9 @@ auto loadBinaryFiles(const std::vector<std::filesystem::path>& paths, size_t& fi
 				timestamps.push_back(frame.t0 + (static_cast<double>(i) * frame.dt));
 			}
 
+			stream_time = frame.t0 + (static_cast<double>(frame.sample_count) * frame.dt);
+
+			// Only a resync can move the stream backwards over samples already collected.
 			raw_streams.truncateFrom(frame.t0);
 
 			for (size_t block = 0; block < blocks.size(); ++block) {
