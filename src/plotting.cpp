@@ -98,7 +98,7 @@ namespace {
 
 		try {
 			const auto &aggregate = dd.aggregates.at(resulting_idx);
-			return {static_cast<double>(aggregate.date), fn(aggregate)};
+			return {aggregate.date, fn(aggregate)};
 		} catch (const std::exception &e) {
 			spdlog::error("{} i = {}, plot_data.start_index = {}, aggregates.size() = {}", e.what(), resulting_idx,
 						  plot_data.start_index, dd.aggregates.size());
@@ -131,7 +131,7 @@ namespace {
 		return getAggregatedPlotData(i, data, [](const auto &aggregate) { return aggregate.mean - aggregate.std; });
 	}
 
-	auto createSegments(std::span<const time_t> timestamps, time_t gap_threshold)
+	auto createSegments(std::span<const double> timestamps, double gap_threshold)
 		-> std::vector<std::pair<size_t, size_t>> {
 		std::vector<std::pair<size_t, size_t>> segments;
 		size_t segment_start = 0;
@@ -269,8 +269,8 @@ namespace {
 			return {0, 0};
 		}
 
-		const auto date_min = static_cast<double>(data.timestamp->front());
-		const auto date_max = static_cast<double>(data.timestamp->back());
+		const auto date_min = data.timestamp->front();
+		const auto date_max = data.timestamp->back();
 
 		const auto padding_percent = ImPlot::GetStyle().FitPadding.x;
 		const auto full_range = date_max - date_min;
@@ -278,14 +278,14 @@ namespace {
 		return {date_min - padding, date_max + padding};
 	}
 
-	auto getIndicesFromTimeRange(const std::vector<time_t> &date, const ImPlotRange &limits)
+	auto getIndicesFromTimeRange(const std::vector<double> &date, const ImPlotRange &limits)
 		-> std::pair<size_t, size_t> {
 		if (date.empty()) {
 			return {0, 0};
 		}
 
-		const auto start = static_cast<time_t>(limits.Min);
-		const auto stop = static_cast<time_t>(limits.Max);
+		const auto start = limits.Min;
+		const auto stop = limits.Max;
 		const auto start_it = std::ranges::lower_bound(date, start);
 		const auto stop_it = std::ranges::upper_bound(date, stop);
 
@@ -307,8 +307,8 @@ namespace {
 			return {0, 0};
 		}
 
-		const auto start = static_cast<time_t>(limits.Min);
-		const auto stop = static_cast<time_t>(limits.Max);
+		const auto start = limits.Min;
+		const auto stop = limits.Max;
 		const auto start_it =
 			std::ranges::lower_bound(agg, start, std::ranges::less{}, &data_aggregate_t::date);
 		const auto stop_it =
@@ -327,8 +327,8 @@ namespace {
 	}
 
 	auto getXLims(const std::vector<data_dict_t> &data) -> std::pair<double, double> {
-		auto date_min = std::numeric_limits<time_t>::max();
-		auto date_max = std::numeric_limits<time_t>::lowest();
+		auto date_min = std::numeric_limits<double>::max();
+		auto date_max = std::numeric_limits<double>::lowest();
 
 		for (const auto &col : data) {
 			if (!col.visible) {
@@ -343,7 +343,7 @@ namespace {
 			date_max = std::max(date_max, col.timestamp->back());
 		}
 
-		return {static_cast<double>(date_min), static_cast<double>(date_max)};
+		return {date_min, date_max};
 	}
 
 	auto getPaddedXLims(const std::vector<data_dict_t> &data) -> std::pair<double, double> {
@@ -434,7 +434,7 @@ namespace {
 	}
 
 	auto getValueOf(const data_dict_t &col, double position) -> std::pair<double, double> {
-		const auto it = std::ranges::lower_bound(*col.timestamp, static_cast<time_t>(position));
+		const auto it = std::ranges::lower_bound(*col.timestamp, position);
 		if (it == col.timestamp->end()) {
 			return {col.timestamp->back(), col.data->back()};
 		}
@@ -446,8 +446,8 @@ namespace {
 
 		if (index > 0) {
 			const auto prev_index = index - 1;
-			const auto prev_time = static_cast<double>(col.timestamp->at(prev_index));
-			const auto next_time = static_cast<double>(col.timestamp->at(index));
+			const auto prev_time = col.timestamp->at(prev_index);
+			const auto next_time = col.timestamp->at(index);
 
 			if (position - prev_time < next_time - position) {
 				return {prev_time, col.data->at(prev_index)};
@@ -479,8 +479,8 @@ namespace {
 		auto &app_state = AppState::getInstance();
 
 		if ((app_state.always_show_cursor || app_state.is_ctrl_pressed) &&
-			app_state.global_x_mouse_position >= static_cast<double>(col.timestamp->front()) &&
-			app_state.global_x_mouse_position <= static_cast<double>(col.timestamp->back())) {
+			app_state.global_x_mouse_position >= col.timestamp->front() &&
+			app_state.global_x_mouse_position <= col.timestamp->back()) {
 				const auto scatter_line_name = "##" + col.uuid + "scatter_line_y";
 				const auto [val_x, val_y] = getValueOf(col, app_state.global_x_mouse_position);
 
@@ -824,8 +824,8 @@ namespace {
 		}
 
 		if ((app_state.always_show_cursor || app_state.is_ctrl_pressed) &&
-			app_state.global_x_mouse_position >= static_cast<double>(col.timestamp->front()) &&
-			app_state.global_x_mouse_position <= static_cast<double>(col.timestamp->back())) {
+			app_state.global_x_mouse_position >= col.timestamp->front() &&
+			app_state.global_x_mouse_position <= col.timestamp->back()) {
 
 			auto spec = ImPlotSpec{};
 			spec.LineColor = cursor_color;
@@ -945,7 +945,7 @@ namespace {
 	}
 }  // namespace
 
-auto plotDataInSubplots(CSVWindowContext &window_context) -> void {
+auto plotDataInSubplots(DataWindowContext &window_context) -> void {
 	const auto plot_size = ImGui::GetContentRegionAvail();
 
 	static auto data_filter = [](const auto &dct) { return dct.visible; };

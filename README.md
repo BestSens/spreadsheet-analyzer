@@ -15,6 +15,7 @@ Spreadsheet Analyzer is a native desktop application for loading, exploring, and
 
 **Data Loading**
 - Open single files, multiple files, or entire folders at once
+- CSV and BeMoS one raw data (`.bin`) files, side by side on a shared time axis
 - Automatic detection of multiple timestamp formats
 - Background loading with progress indicator
 - Duplicate any loaded dataset for side-by-side comparison
@@ -64,6 +65,53 @@ Numeric columns without a timestamp are also supported.
 
 ---
 
+## Binary Raw Data
+
+BeMoS one controllers write the waveform level of their measurements as binary files
+(`logs_SN…/sync/YYYY_MM_DD/*.bin`, one per ten minutes) next to the CSV log of the top-level
+values. Both can be opened through the same entry points; a selection or folder holding both
+opens one window per type. The format is documented in the BeMoS one manual, section 11.2
+"Rohdatenformat".
+
+A file is a sequence of frames, each made up of a 16 byte header, a JSON metadata field and a
+raw data field. All values are stored in network byte order.
+
+| Field | Size | Meaning |
+|---|---|---|
+| `type` | 1 B | which streams the raw data field holds |
+| `dt` | 4 B | spacing between two samples, µs |
+| `t0` | 4 B | unix timestamp of the first sample |
+| `sM` | 3 B | length of the metadata field |
+| `sP` | 4 B | length of the raw data field |
+
+The streams selected by `type` follow each other in equally sized blocks:
+
+| `type` | Streams |
+|---|---|
+| 0 | sync |
+| 1 | ks |
+| 2 | sync, integral1 |
+| 3 | sync, integral1, integral2, coe |
+| 4 | iepe |
+
+`sync` carries two channels per 4 byte slice — the upper 20 bits are the propagation delay (ns),
+the lower 12 bits the amplitude (V). `integral1`, `integral2`, `coe` and `iepe` are single
+precision floats in V, V, ns and G. `ks` samples are 2 bytes in V.
+
+From each frame's metadata the application additionally builds:
+
+- one column per entry of the controller's `logging_config.data_sources`, carrying its display
+  name, unit and decimals, sampled once per frame,
+- columns for the frame header values (`board_temp`, `level`, `vga`, `gate`, `temp`, …),
+- the DirectView snapshot and the full settings tree, shown in the frame inspector next to the
+  plot. The inspector follows the plot cursor, so scrubbing the time axis steps through the
+  frames. Toggle it with the waveform button in the window's menu bar.
+
+Frames overlap in time — a frame usually covers more seconds than the interval to the next one.
+Later frames win, so the samples of a frame are clipped where the next frame starts.
+
+---
+
 ## Keyboard Shortcuts
 
 | Shortcut | Action |
@@ -72,7 +120,7 @@ Numeric columns without a timestamp are also supported.
 | `Ctrl+Shift+O` | Open folder |
 | `Ctrl+Q` | Quit |
 | `Shift+Click` | Select a range of columns |
-| `Ctrl+Click` | Keep current selection |
+| `Ctrl+Click` | Add or remove a single column (`Cmd+Click` on macOS) |
 
 ---
 
@@ -90,7 +138,7 @@ spreadsheet_analyzer --verbose data.csv
 
 | Flag | Description |
 |---|---|
-| `FILE` | One or more CSV files to open on startup |
+| `FILE` | One or more CSV or `.bin` files to open on startup |
 | `-v`, `--verbose` | Enable verbose output and show the debug menu |
 | `-h`, `--help` | Print usage |
 
@@ -135,6 +183,7 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release -DUSE_LTO=OFF
 | Windowing / rendering | [SDL3](https://github.com/libsdl-org/SDL) + OpenGL |
 | Image loading | [SDL_image](https://github.com/libsdl-org/SDL_image) |
 | CSV parsing | [csv-parser](https://github.com/vincentlaucsb/csv-parser) |
+| JSON parsing | [glaze](https://github.com/stephenberry/glaze) |
 | Float parsing | [fast_float](https://github.com/fastfloat/fast_float) |
 | Logging | [spdlog](https://github.com/gabime/spdlog) + [fmt](https://github.com/fmtlib/fmt) |
 | File dialogs | [nativefiledialog-extended](https://github.com/btzy/nativefiledialog-extended) |

@@ -32,6 +32,9 @@ add_executable(spreadsheet_analyzer
 	src/about_screen.cpp
 	src/imgui_extensions.cpp
 	src/csv_handling.cpp
+	src/binary_handling.cpp
+	src/file_types.cpp
+	src/frame_inspector.cpp
 	src/plotting.cpp
 	src/file_dialog.cpp
 	src/winapi.cpp
@@ -120,6 +123,7 @@ include(compiler_warnings)
 include(version)
 include(fast_float)
 include(date)
+include(glaze)
 
 if(APPLE)
 	target_link_options(spreadsheet_analyzer PRIVATE "LINKER:-no_warn_duplicate_libraries")
@@ -155,6 +159,7 @@ target_link_libraries(spreadsheet_analyzer PRIVATE
 	stduuid
 	fast_float
 	date
+	glaze::glaze
 
 	roboto_sans
 	roboto_mono

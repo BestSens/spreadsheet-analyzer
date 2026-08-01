@@ -1,4 +1,6 @@
 ## 1.2.2 (unreleased)
+* add support for BeMoS one raw data files (`.bin`)
+* fix column multi-select: extending a selection upwards now selects the whole range, the list no longer truncates on a modified click, and the command key works for single-column selection on macOS
 * add drag and drop support
 * improve progress indicator when loading large files
 * fix id mismatch in recent files list

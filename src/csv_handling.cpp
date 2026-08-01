@@ -414,7 +414,7 @@ namespace {
 
 			try {
 				const auto date_str = row[date_col_idx].get<std::string>();
-				const auto date = parseDate(date_str, prefered_date_fmt, fmt_list);
+				const auto date = static_cast<double>(parseDate(date_str, prefered_date_fmt, fmt_list));
 
 				for (size_t col = 0; const auto &col_name : col_names) {
 					try {
@@ -495,33 +495,6 @@ namespace {
 		return (val1 + val2) / T{2};
 	}
 }  // namespace
-
-auto preparePaths(std::vector<std::filesystem::path> paths) -> std::vector<std::filesystem::path> {
-	std::vector<std::filesystem::path> files{};
-	files.reserve(paths.size());
-
-	std::sort(paths.begin(), paths.end(), [](const auto& a, const auto& b) {
-		return a.filename() < b.filename();
-	});
-
-	for (auto& path : paths) {
-		// resolve Windows shortcuts (.lnk) to their target; std::filesystem already
-		// follows real symlinks/junctions transparently via is_directory()/status()
-		path = resolveShortcut(path);
-
-		if (std::filesystem::is_directory(path)) {
-			for (const auto& entry : std::filesystem::directory_iterator(path)) {
-				if (entry.path().extension() == ".csv") {
-					files.push_back(entry.path());
-				}
-			}
-		} else {
-			files.push_back(path);
-		}
-	}
-
-	return files;
-}
 
 auto loadCSVs(const std::vector<std::filesystem::path>& paths, size_t& finished, const std::atomic<bool>& stop_loading,
 			  const csv_parse_config_t& config, std::string& parse_error_out,
@@ -615,7 +588,7 @@ auto loadCSVs(const std::vector<std::filesystem::path>& paths, size_t& finished,
 
 		dd.data_type = is_boolean ? data_type_t::BOOLEAN : data_type_t::FLOAT;
 
-		std::vector<time_t> time_deltas{};
+		std::vector<double> time_deltas{};
 		time_deltas.reserve(dd.timestamp->size() - 1);
 
 		for (size_t i = 1; i < dd.timestamp->size(); ++i) {

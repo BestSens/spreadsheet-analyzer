@@ -12,7 +12,7 @@ enum class data_type_t : uint8_t {
 };
 
 struct data_aggregate_t {
-	time_t date;
+	double date;
 	double min;
 	double max;
 	double mean;
@@ -30,8 +30,9 @@ struct data_dict_t {
 	// 0 = auto-assign, 1/2/3 = explicit Y1/Y2/Y3. Multiple columns may share the same axis.
 	int y_axis{0};
 
-	std::shared_ptr<std::vector<time_t>> timestamp{std::make_shared<std::vector<time_t>>()};
-	time_t delta_t{};
+	// unix time in seconds; double so sub-second sample rates (binary raw data) fit
+	std::shared_ptr<std::vector<double>> timestamp{std::make_shared<std::vector<double>>()};
+	double delta_t{};
 	std::shared_ptr<std::vector<double>> data{std::make_shared<std::vector<double>>()};
 
 	size_t aggregated_to{0};
@@ -45,7 +46,7 @@ struct immediate_dict {
 	std::string name;
 	std::string unit;
 
-	std::vector<std::pair<time_t, double>> data{};
+	std::vector<std::pair<double, double>> data{};
 };
 
 struct csv_parse_config_t {

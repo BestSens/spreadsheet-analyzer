@@ -43,7 +43,7 @@ public:
 	SDL_Renderer* renderer{nullptr};
 	SDL_Surface* window_icon{nullptr};
 
-	std::list<std::variant<CSVWindowContext>> window_contexts{};
+	std::list<std::variant<CSVWindowContext, BinaryWindowContext>> window_contexts{};
 	std::vector<recent_file_entry_t> recent_files{};
 	// NOLINTEND(misc-non-private-member-variables-in-classes)
 

@@ -29,11 +29,14 @@
 #include "spdlog/spdlog.h"
 
 // Own headers
+#include "binary_handling.hpp"
 #include "csv_handling.hpp"
 #include "custom_type_traits.hpp"
 #include "dicts.hpp"
 #include "file_dialog.hpp"
+#include "file_types.hpp"
 #include "fonts.hpp"
+#include "frame_inspector.hpp"
 #include "global_state.hpp"
 #include "imgui_extensions.hpp"
 #include "plotting.hpp"
@@ -73,35 +76,51 @@ namespace {
 	auto updateDateRange(const auto &window_contexts) -> void {
 		double date_min = std::numeric_limits<double>::max();
 		double date_max = std::numeric_limits<double>::lowest();
-		
+
 		for (const auto& window_context : window_contexts) {
-			if (!std::holds_alternative<CSVWindowContext>(window_context)) {
-				continue;
-			}
+			std::visit(
+				[&date_min, &date_max](const auto &ctx) -> void {
+					for (const auto &e : ctx.getData()) {
+						if (!e.visible) {
+							continue;
+						}
 
-			const auto &data = std::get<CSVWindowContext>(window_context).getData();
+						if (e.timestamp->empty()) {
+							continue;
+						}
 
-			if (data.empty()) {
-				continue;
-			}
-
-			for (const auto &e : data) {
-				if (!e.visible) {
-					continue;
-				}
-
-				if (e.timestamp->empty()) {
-					continue;
-				}
-
-				date_min = std::min(date_min, static_cast<double>(e.timestamp->front()));
-				date_max = std::max(date_max, static_cast<double>(e.timestamp->back()));
-			}
+						date_min = std::min(date_min, e.timestamp->front());
+						date_max = std::max(date_max, e.timestamp->back());
+					}
+				},
+				window_context);
 		}
 
 		if (date_min != std::numeric_limits<double>::max() && date_max != std::numeric_limits<double>::lowest()) {
 			AppState::getInstance().date_range = {date_min, date_max};
 		}
+	}
+
+	// Expands the selection, splits it by file type and opens one window per type. A folder holding
+	// both CSV and binary files therefore ends up in two windows.
+	auto openPaths(const std::vector<std::filesystem::path> &paths, bool force_custom_import = false) -> bool {
+		const auto groups = groupPathsByType(preparePaths(paths));
+		auto &window_contexts = AppState::getInstance().window_contexts;
+
+		for (const auto &[type, group_paths] : groups) {
+			switch (type) {
+			case file_type_t::CSV:
+				window_contexts.emplace_back(std::in_place_type<CSVWindowContext>, group_paths,
+											 CSVWindowContext::function_signature{loadCSVs}, force_custom_import);
+				break;
+			case file_type_t::BINARY:
+				window_contexts.emplace_back(std::in_place_type<BinaryWindowContext>, group_paths,
+											 BinaryWindowContext::function_signature{loadBinaryFiles});
+				break;
+			}
+		}
+
+		return !groups.empty();
 	}
 
 	auto setSystemLocale() -> void {
@@ -146,7 +165,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 		options.add_options()
 			("h,help", "Print usage")
-			("filename", "CSV file to load", cxxopts::value<std::vector<std::string>>(), "FILE")
+			("filename", "CSV or BeMoS one raw data file to load", cxxopts::value<std::vector<std::string>>(), "FILE")
 			("v,verbose", "verbose output")
 			;
 
@@ -183,14 +202,8 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 	app_state.recent_files = loadRecentFiles();
 
-	{
-		const auto paths_expanded = preparePaths(commandline_paths);
-
-		if (!paths_expanded.empty()) {
-			window_contexts.emplace_back(std::in_place_type<CSVWindowContext>, paths_expanded,
-										 CSVWindowContext::function_signature{loadCSVs});
-			addRecentFiles(app_state.recent_files, commandline_paths);
-		}
+	if (openPaths(commandline_paths)) {
+		addRecentFiles(app_state.recent_files, commandline_paths);
 	}
 
 	if (!SDL_Init(SDL_INIT_VIDEO)) {
@@ -300,24 +313,6 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 				if (event.key.key == SDLK_Q && (event.key.mod & SDL_KMOD_CTRL) != 0) {
 					done = true;
 				}
-
-				if ((event.key.mod & SDL_KMOD_CTRL) != 0) {
-					app_state.is_ctrl_pressed = true;
-				}
-
-				if ((event.key.mod & SDL_KMOD_SHIFT) != 0) {
-					app_state.is_shift_pressed = true;
-				}
-			}
-
-			if (event.type == SDL_EVENT_KEY_UP) {
-				if ((event.key.mod & SDL_KMOD_CTRL) == 0) {
-					app_state.is_ctrl_pressed = false;
-				}
-
-				if ((event.key.mod & SDL_KMOD_SHIFT) == 0) {
-					app_state.is_shift_pressed = false;
-				}
 			}
 
 			if (event.type == SDL_EVENT_DROP_BEGIN) {
@@ -346,6 +341,13 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 		ImGui_ImplSDLRenderer3_NewFrame();
 		ImGui_ImplSDL3_NewFrame();
 		ImGui::NewFrame();
+
+		// Modifier state comes from ImGui rather than from the SDL key events: it cannot get stuck
+		// when the window loses focus mid-press, and it covers the command key, which is what macOS
+		// leaves usable for multi-select — ctrl+click is turned into a right click there.
+		app_state.is_ctrl_pressed = io.KeyCtrl || io.KeySuper;
+		app_state.is_shift_pressed = io.KeyShift;
+
 		ImVec2 menu_size{};
 
 		if (ImGui::BeginMainMenuBar()) {
@@ -408,20 +410,13 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 		if (open_selected) {
 			const auto paths = selectFilesFromDialog(select_folder);
 
-			if (!paths.empty()) {
-				const auto paths_expanded = preparePaths(paths);
-				window_contexts.emplace_back(std::in_place_type<CSVWindowContext>, paths_expanded,
-				                             CSVWindowContext::function_signature{loadCSVs}, force_custom_import);
+			if (!paths.empty() && openPaths(paths, force_custom_import)) {
 				addRecentFiles(app_state.recent_files, paths);
 			}
 		}
 
 		if (files_dropped && !dropped_paths.empty()) {
-			const auto paths_expanded = preparePaths(dropped_paths);
-
-			if (!paths_expanded.empty()) {
-				window_contexts.emplace_back(std::in_place_type<CSVWindowContext>, paths_expanded,
-											 CSVWindowContext::function_signature{loadCSVs});
+			if (openPaths(dropped_paths)) {
 				addRecentFiles(app_state.recent_files, dropped_paths);
 			}
 
@@ -432,14 +427,8 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 			clearRecentFiles(app_state.recent_files);
 		}
 
-		if (recent_selected.has_value()) {
-			const auto paths_expanded = preparePaths(recent_selected->paths);
-
-			if (!paths_expanded.empty()) {
-				window_contexts.emplace_back(std::in_place_type<CSVWindowContext>, paths_expanded,
-				                             CSVWindowContext::function_signature{loadCSVs});
-				addRecentFiles(app_state.recent_files, recent_selected->paths);
-			}
+		if (recent_selected.has_value() && openPaths(recent_selected->paths)) {
+			addRecentFiles(app_state.recent_files, recent_selected->paths);
 		}
 
 		showAboutScreen();
@@ -675,15 +664,14 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 		updateDateRange(window_contexts);
 
 		for (auto &temp : window_contexts) {
-			if (!std::holds_alternative<CSVWindowContext>(temp)) {
-				continue;
-			}
+			std::visit([&](auto &ctx) -> void {
+			using context_t = std::decay_t<decltype(ctx)>;
+			constexpr auto is_binary = std::is_same_v<context_t, BinaryWindowContext>;
 
-			auto &ctx = std::get<CSVWindowContext>(temp);
 			ctx.checkForFinishedLoading();
 			auto &dict = ctx.getData();
 			auto &window_open = ctx.getWindowOpenRef();
-			
+
 			ImGui::SetNextWindowDockID(dockspace, ImGuiCond_Once);
 			ImGui::Begin(ctx.getWindowID().c_str(), &window_open,
 						 ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_MenuBar);
@@ -730,6 +718,17 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
 					ImGui::SetTooltip("Duplicate");	 // NOLINT(hicpp-vararg)
 				}
+
+				if constexpr (is_binary) {
+					bool &show_inspector = ctx.getShowInspectorRef();
+
+					ImGui::MenuItem(ICON_FA_WAVE_SQUARE, nullptr, &show_inspector);
+
+					if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)) {
+						ImGui::SetTooltip("DirectView and frame header");  // NOLINT(hicpp-vararg)
+					}
+				}
+
 				ImGui::EndMenuBar();
 			}
 
@@ -766,34 +765,34 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 												  : 0.0f;
 
 							const auto list_id = dct.name + "##" + dct.uuid;
+							// Selectable already toggled dct.visible; the branches below only decide what
+							// happens to the *other* entries. Never break out of the loop here: that would
+							// skip the PopID below and leave the ID stack unbalanced for the rest of the frame.
 							if (ImGui::Selectable(list_id.c_str(), &dct.visible, 0, ImVec2(selectable_width, 0))) {
-								if (app_state.is_ctrl_pressed) {
-									break;
-								}
-
 								if (app_state.is_shift_pressed) {
-									const auto first_visible =
-										std::ranges::find_if(dict, [](const auto& tmp) -> bool { return tmp.visible; });
+									// Anchor is the first entry that was already selected before this click,
+									// so extending upwards selects the range instead of just its two ends.
+									const auto anchor = std::ranges::find_if(dict, [&dct](const auto& tmp) -> bool {
+										return tmp.visible && tmp.uuid != dct.uuid;
+									});
 
 									const auto current_dict = std::ranges::find_if(
 										dict, [&dct](const auto& tmp) -> bool { return tmp.uuid == dct.uuid; });
 
-									if (first_visible != dict.end() && current_dict != dict.end()) {
-										const auto first_index = std::distance(dict.begin(), first_visible);
+									if (anchor != dict.end() && current_dict != dict.end()) {
+										const auto anchor_index = std::distance(dict.begin(), anchor);
 										const auto current_index = std::distance(dict.begin(), current_dict);
 
-										const auto start = std::min(first_index, current_index);
-										const auto stop = std::max(first_index, current_index);
+										const auto start = std::min(anchor_index, current_index);
+										const auto stop = std::max(anchor_index, current_index);
 
 										std::ranges::for_each(dict.begin() + start, dict.begin() + stop + 1,
 															  [](auto& tmp) -> void { tmp.visible = true; });
 									}
-
-									break;
+								} else if (!app_state.is_ctrl_pressed) {
+									std::ranges::for_each(dict, [](auto &tmp) -> void { tmp.visible = false; });
+									dct.visible = true;
 								}
-
-								std::ranges::for_each(dict, [](auto &tmp) -> void { tmp.visible = false; });
-								dct.visible = true;
 							}
 
 							if (show_axis_picker) {
@@ -845,12 +844,21 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 					ImGui::SameLine();
 
-					ImGui::BeginChild("File content", ImVec2(window_content_size.x - 255, window_content_size.y));
+					const auto inspector_width = [&]() -> float {
+						if constexpr (is_binary) {
+							return ctx.getShowInspectorRef() ? 320.0f : 0.0f;
+						} else {
+							return 0.0f;
+						}
+					}();
+
+					ImGui::BeginChild("File content",
+									  ImVec2(window_content_size.x - 255 - inspector_width, window_content_size.y));
 					ImGui::PushFont(getFont(fontList::ROBOTO_MONO_16));
-					
+
 					ctx.switchToImPlotContext();
 					plotDataInSubplots(ctx);
-					
+
 					if (app_state.show_debug_menu) {
 						ImGui::PushID(ctx.getUUID().c_str());
 						ImPlot::ShowMetricsWindow();
@@ -859,6 +867,19 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 					ImGui::PopFont();
 					ImGui::EndChild();
+
+					if constexpr (is_binary) {
+						if (inspector_width > 0.0f) {
+							ImGui::SameLine();
+							ImGui::BeginChild("Frame inspector",
+											  ImVec2(inspector_width - 5.0f, window_content_size.y));
+							ctx.switchToImPlotContext();
+							renderFrameInspector(ctx);
+							ImGui::EndChild();
+						}
+					}
+				} else if (const auto message = ctx.getLoadErrorMessage(); !message.empty()) {
+					ImGui::TextUnformatted(message.data(), message.data() + message.size());
 				} else {
 					ImGui::Text("No valid data found.");  // NOLINT(hicpp-vararg)
 				}
@@ -870,6 +891,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 				ImGui::ClearWindowSettings(ctx.getWindowID().c_str());
 				ctx.scheduleForDeletion();
 			}
+			}, temp);
 		}
 
 		std::erase_if(window_contexts, [](const auto& ctx) -> bool {

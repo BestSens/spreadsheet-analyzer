@@ -11,7 +11,9 @@ auto selectFilesFromDialog(bool select_folder) -> std::vector<std::filesystem::p
 	const NFD::Guard nfd_guard{};
 	NFD::UniquePathSet out_paths{};
 
-	const auto filters = std::array<nfdfilteritem_t, 1>{nfdfilteritem_t{"CSV", "csv"}};
+	const auto filters = std::array<nfdfilteritem_t, 3>{nfdfilteritem_t{"Data files", "csv,bin"},
+														nfdfilteritem_t{"CSV", "csv"},
+														nfdfilteritem_t{"BeMoS raw data", "bin"}};
 
 	const auto result = [&]() {
 		if (!select_folder) {
