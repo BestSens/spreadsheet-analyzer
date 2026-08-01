@@ -672,6 +672,12 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 			auto &dict = ctx.getData();
 			auto &window_open = ctx.getWindowOpenRef();
 
+			if constexpr (is_binary) {
+				// Has to happen before the stream window is submitted: docking the inspector next to
+				// it moves the stream window into a new dock node.
+				placeFrameInspectorWindow(ctx);
+			}
+
 			ImGui::SetNextWindowDockID(dockspace, ImGuiCond_Once);
 			ImGui::Begin(ctx.getWindowID().c_str(), &window_open,
 						 ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_MenuBar);
@@ -844,16 +850,7 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 					ImGui::SameLine();
 
-					const auto inspector_width = [&]() -> float {
-						if constexpr (is_binary) {
-							return ctx.getShowInspectorRef() ? 320.0f : 0.0f;
-						} else {
-							return 0.0f;
-						}
-					}();
-
-					ImGui::BeginChild("File content",
-									  ImVec2(window_content_size.x - 255 - inspector_width, window_content_size.y));
+					ImGui::BeginChild("File content", ImVec2(window_content_size.x - 255, window_content_size.y));
 					ImGui::PushFont(getFont(fontList::ROBOTO_MONO_16));
 
 					ctx.switchToImPlotContext();
@@ -867,17 +864,6 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 					ImGui::PopFont();
 					ImGui::EndChild();
-
-					if constexpr (is_binary) {
-						if (inspector_width > 0.0f) {
-							ImGui::SameLine();
-							ImGui::BeginChild("Frame inspector",
-											  ImVec2(inspector_width - 5.0f, window_content_size.y));
-							ctx.switchToImPlotContext();
-							renderFrameInspector(ctx);
-							ImGui::EndChild();
-						}
-					}
 				} else if (const auto message = ctx.getLoadErrorMessage(); !message.empty()) {
 					ImGui::TextUnformatted(message.data(), message.data() + message.size());
 				} else {
@@ -887,8 +873,19 @@ auto main(int argc, char **argv) -> int {  // NOLINT(readability-function-cognit
 
 			ImGui::End();
 
+			if constexpr (is_binary) {
+				if (window_open) {
+					renderFrameInspectorWindow(ctx);
+				}
+			}
+
 			if (!window_open) {
 				ImGui::ClearWindowSettings(ctx.getWindowID().c_str());
+
+				if constexpr (is_binary) {
+					ImGui::ClearWindowSettings(ctx.getInspectorWindowID().c_str());
+				}
+
 				ctx.scheduleForDeletion();
 			}
 			}, temp);

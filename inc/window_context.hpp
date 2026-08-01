@@ -500,13 +500,17 @@ public:
 	}
 
 	BinaryWindowContext(const BinaryWindowContext &other)
-		: DataWindowContext(other), binary_data{other.binary_data}, show_inspector{other.show_inspector} {};
+		: DataWindowContext(other), binary_data{other.binary_data}, show_inspector{other.show_inspector},
+		  inspector_metadata_height{other.inspector_metadata_height} {};
 
 	auto operator=(const BinaryWindowContext &other) -> BinaryWindowContext & {
 		if (this != &other) {
 			DataWindowContext::operator=(other);
 			this->binary_data = other.binary_data;
 			this->show_inspector = other.show_inspector;
+			this->inspector_metadata_height = other.inspector_metadata_height;
+			// The copy is a window of its own, so its inspector still has to find its place.
+			this->inspector_placed = false;
 		}
 
 		return *this;
@@ -514,7 +518,8 @@ public:
 
 	BinaryWindowContext(BinaryWindowContext &&other) noexcept
 		: DataWindowContext(std::move(other)), binary_data{std::move(other.binary_data)},
-		  show_inspector{other.show_inspector} {
+		  show_inspector{other.show_inspector}, inspector_placed{other.inspector_placed},
+		  inspector_metadata_height{other.inspector_metadata_height} {
 		std::swap(this->binary_data_f, other.binary_data_f);
 		std::swap(this->load_error, other.load_error);
 		spdlog::debug("Moved binary window context with UUID: {}", this->getUUID());
@@ -525,6 +530,8 @@ public:
 			DataWindowContext::operator=(std::move(other));
 			this->binary_data = std::move(other.binary_data);
 			this->show_inspector = other.show_inspector;
+			this->inspector_placed = other.inspector_placed;
+			this->inspector_metadata_height = other.inspector_metadata_height;
 
 			std::swap(this->binary_data_f, other.binary_data_f);
 			std::swap(this->load_error, other.load_error);
@@ -582,6 +589,26 @@ public:
 		return this->show_inspector;
 	}
 
+	// The inspector is a dockable window of its own, named after the stream window it belongs to.
+	[[nodiscard]] auto getInspectorWindowID() const -> std::string {
+		return this->getWindowTitle() + " · DirectView##inspector-" + this->getUUID();
+	}
+
+	// False until the inspector has been put next to its stream window once. Afterwards the user
+	// owns its placement and we never move it again.
+	[[nodiscard]] auto isInspectorPlaced() const -> bool {
+		return this->inspector_placed;
+	}
+
+	auto markInspectorPlaced() -> void {
+		this->inspector_placed = true;
+	}
+
+	// Height of the metadata tree below the DirectView plot, dragged by the inspector's splitter.
+	auto getInspectorMetadataHeightRef() -> float & {
+		return this->inspector_metadata_height;
+	}
+
 	// Index of the frame covering the given time, clamped to the available range.
 	[[nodiscard]] auto getFrameIndexForTime(double time) const -> size_t {
 		const auto &frames = this->binary_data.frames;
@@ -614,4 +641,6 @@ private:
 	std::future<binary_data_t> binary_data_f{};
 	std::shared_ptr<std::string> load_error{std::make_shared<std::string>()};
 	bool show_inspector{true};
+	bool inspector_placed{false};
+	float inspector_metadata_height{200.0f};
 };

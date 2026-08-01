@@ -4,6 +4,7 @@
 * add drag and drop support
 * improve progress indicator when loading large files
 * fix id mismatch in recent files list
+* show the DirectView inspector in its own window, docked to the right of the stream it belongs to
 * fix crash report on exit after closing the application gracefully
 
 ## 1.2.1 (31.07.2026)

@@ -1,5 +1,6 @@
 #include "frame_inspector.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <ctime>
 #include <string>
@@ -12,9 +13,18 @@
 #include "glaze/json/generic.hpp"
 #include "global_state.hpp"
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "implot.h"
 
 namespace {
+	// Share of the stream window the inspector claims when it first docks next to it.
+	constexpr float inspector_split_ratio{0.25f};
+
+	// The DirectView plot gets everything the metadata tree below it does not need.
+	constexpr float splitter_thickness{6.0f};
+	constexpr float min_plot_height{80.0f};
+	constexpr float min_metadata_height{40.0f};
+
 	// The inspector only ever shows one frame at a time, so a single parsed frame is all we keep.
 	// Re-reading and re-parsing on a change costs a seek plus ~15 kB of JSON.
 	struct metadata_cache_t {
@@ -196,11 +206,11 @@ namespace {
 		return fmt::format("{:%Y-%m-%d %H:%M:%S}", local);
 	}
 
-	auto renderDirectView(const binary_frame_t& frame) -> void {
-		const auto height = ImGui::GetContentRegionAvail().y * 0.35f;
-
+	auto renderDirectView(const binary_frame_t& frame, float height) -> void {
 		if (frame.directview.empty()) {
 			ImGui::TextUnformatted("No DirectView data in this frame.");
+			// Keep the splitter below where the plot would have ended.
+			ImGui::Dummy(ImVec2(0.0f, std::max(height - ImGui::GetTextLineHeightWithSpacing(), 0.0f)));
 			return;
 		}
 
@@ -211,39 +221,119 @@ namespace {
 			ImPlot::EndPlot();
 		}
 	}
+
+	// Drag handle between the plot and the metadata tree. Only the metadata height is kept: the plot
+	// takes whatever is left, so it keeps filling the window when that is resized.
+	auto renderSplitter(float& metadata_height, float plot_height) -> void {
+		const auto position = ImGui::GetCursorScreenPos();
+		const auto width = ImGui::GetContentRegionAvail().x;
+		const ImRect bounding_box{position, ImVec2(position.x + width, position.y + splitter_thickness)};
+
+		float plot_size = plot_height;
+		ImGui::SplitterBehavior(bounding_box, ImGui::GetID("##inspector_splitter"), ImGuiAxis_Y, &plot_size,
+								&metadata_height, min_plot_height, min_metadata_height);
+
+		ImGui::Dummy(ImVec2(width, splitter_thickness));
+	}
+
+	auto renderInspectorContent(BinaryWindowContext& window_context) -> void {
+		const auto& binary_data = window_context.getBinaryData();
+
+		if (binary_data.frames.empty()) {
+			ImGui::TextUnformatted("No frames loaded.");
+			return;
+		}
+
+		const auto frame_index = window_context.getFrameIndexForTime(AppState::getInstance().global_x_mouse_position);
+		const auto& frame = binary_data.frames[frame_index];
+
+		ImGui::Text(ICON_FA_CLOCK " %s", formatLocalTime(frame.t0).c_str());  // NOLINT(hicpp-vararg)
+		ImGui::Text("frame %zu/%zu · %s · %zu samples @ %.3f ms",  // NOLINT(hicpp-vararg)
+					frame_index + 1, binary_data.frames.size(), std::string{frameTypeName(frame.type)}.c_str(),
+					frame.sample_count, frame.dt * 1000.0);
+
+		ImGui::Separator();
+
+		const auto& cache = updateCache(window_context, frame_index);
+
+		auto& metadata_height = window_context.getInspectorMetadataHeightRef();
+		const auto available_height = ImGui::GetContentRegionAvail().y;
+		const auto height_for_metadata = std::max(available_height - splitter_thickness - min_plot_height, 0.0f);
+
+		metadata_height = std::clamp(metadata_height, std::min(min_metadata_height, height_for_metadata),
+									 height_for_metadata);
+
+		const auto plot_height = std::max(available_height - splitter_thickness - metadata_height, 1.0f);
+
+		renderDirectView(frame, plot_height);
+		renderSplitter(metadata_height, plot_height);
+
+		if (!cache.valid) {
+			ImGui::TextUnformatted("No metadata in this frame.");
+			return;
+		}
+
+		ImGui::BeginChild("##frame_metadata", ImVec2(0.0f, metadata_height));
+		renderSection(cache.metadata, "channel_data", "Measurement data", cache.decimals, true);
+		renderSection(cache.metadata, "channel_attributes", "Settings", cache.decimals, false);
+		ImGui::EndChild();
+	}
 }  // namespace
 
-auto renderFrameInspector(const BinaryWindowContext& window_context) -> void {
-	const auto& binary_data = window_context.getBinaryData();
-
-	if (binary_data.frames.empty()) {
-		ImGui::TextUnformatted("No frames loaded.");
+auto placeFrameInspectorWindow(BinaryWindowContext& window_context) -> void {
+	if (!window_context.getShowInspectorRef() || window_context.isInspectorPlaced()) {
 		return;
 	}
 
-	const auto frame_index = window_context.getFrameIndexForTime(AppState::getInstance().global_x_mouse_position);
-	const auto& frame = binary_data.frames[frame_index];
+	const auto* stream_window = ImGui::FindWindowByName(window_context.getWindowID().c_str());
 
-	ImGui::Text(ICON_FA_CLOCK " %s", formatLocalTime(frame.t0).c_str());  // NOLINT(hicpp-vararg)
-	ImGui::Text("frame %zu/%zu · %s · %zu samples @ %.3f ms",  // NOLINT(hicpp-vararg)
-				frame_index + 1, binary_data.frames.size(), std::string{frameTypeName(frame.type)}.c_str(),
-				frame.sample_count, frame.dt * 1000.0);
-
-	ImGui::Separator();
-
-	renderDirectView(frame);
-
-	ImGui::Separator();
-
-	const auto& cache = updateCache(window_context, frame_index);
-
-	if (!cache.valid) {
-		ImGui::TextUnformatted("No metadata in this frame.");
+	if (stream_window == nullptr || stream_window->DockNode == nullptr) {
+		// Either the stream window has not been submitted yet, or it is floating. Both are handled
+		// when the inspector itself is submitted.
 		return;
 	}
 
-	ImGui::BeginChild("##frame_metadata");
-	renderSection(cache.metadata, "channel_data", "Measurement data", cache.decimals, true);
-	renderSection(cache.metadata, "channel_attributes", "Settings", cache.decimals, false);
-	ImGui::EndChild();
+	auto* host_node = stream_window->DockNode;
+
+	if (host_node->IsSplitNode()) {
+		return;
+	}
+
+	// Splitting hands the existing windows to the left half and gives us the fresh right one, which
+	// leaves the stream window where it is and puts the inspector beside it.
+	const auto root_id = ImGui::DockNodeGetRootNode(host_node)->ID;
+	ImGuiID inspector_node{};
+	ImGui::DockBuilderSplitNode(host_node->ID, ImGuiDir_Right, inspector_split_ratio, &inspector_node, nullptr);
+	ImGui::DockBuilderDockWindow(window_context.getInspectorWindowID().c_str(), inspector_node);
+	ImGui::DockBuilderFinish(root_id);
+
+	window_context.markInspectorPlaced();
+}
+
+auto renderFrameInspectorWindow(BinaryWindowContext& window_context) -> void {
+	auto& show_inspector = window_context.getShowInspectorRef();
+
+	if (!show_inspector) {
+		return;
+	}
+
+	if (!window_context.isInspectorPlaced()) {
+		// Only a stream window that is not docked anywhere needs this: it has no node to split, so
+		// the inspector is parked next to it instead. A docked one is handled by the dock builder on
+		// the next frame — leaving the inspector unplaced for one frame is what keeps that possible.
+		if (const auto* stream_window = ImGui::FindWindowByName(window_context.getWindowID().c_str());
+			stream_window != nullptr && stream_window->DockNode == nullptr) {
+			const auto spacing = ImGui::GetStyle().ItemSpacing.x;
+			ImGui::SetNextWindowPos({stream_window->Pos.x + stream_window->Size.x + spacing, stream_window->Pos.y});
+			ImGui::SetNextWindowSize({stream_window->Size.x * inspector_split_ratio, stream_window->Size.y});
+			window_context.markInspectorPlaced();
+		}
+	}
+
+	if (ImGui::Begin(window_context.getInspectorWindowID().c_str(), &show_inspector)) {
+		window_context.switchToImPlotContext();
+		renderInspectorContent(window_context);
+	}
+
+	ImGui::End();
 }
