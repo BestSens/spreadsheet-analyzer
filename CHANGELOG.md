@@ -2,6 +2,7 @@
 * add drag and drop support
 * improve progress indicator when loading large files
 * fix id mismatch in recent files list
+* update imgui to v1.92.9b (https://github.com/ocornut/imgui/releases/tag/v1.92.9b)
 
 ## 1.2.1 (31.07.2026)
 * fix unit detection with nested parentheses, e.g. `Time (s (seconds))`
